@@ -196,6 +196,46 @@ describe("scene paint on a real canvas", () => {
     expect([stored.layers[0]!.textGradient, stored.layers[0]!.textOutline]).toEqual([undefined, undefined])
   })
 
+  it("draws stars and arrows as the Avnac editor does (#448)", async () => {
+    const empty: Scene = { ...painted, id: "paths", backgroundGradient: undefined, background: "#0b1a3a", layers: [] }
+    const design = sceneToDesign(empty)
+    const star = { id: "star", parentId: design.scene.root, name: "Star", visible: true, x: 300, y: 200, rotation: 0, scaleX: 1, scaleY: 1, opacity: 1, originX: "left", originY: "top", type: "polygon", width: 400, height: 400,
+      points: Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + (i * Math.PI) / 5, rad = i % 2 ? 80 : 200; return { x: Math.round(rad * Math.cos(a)), y: Math.round(rad * Math.sin(a)) } }),
+      fill: { type: "solid", color: "#d14c62" }, stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 8 }
+    const arrow = { id: "arrow", parentId: design.scene.root, name: "Arrow", visible: true, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, opacity: 1, originX: "left", originY: "top", type: "line",
+      x1: 900, y1: 700, x2: 1600, y2: 400, stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 12, arrowStart: false, arrowEnd: true, lineStyle: "solid", pathType: "curved", curveBulge: 120, curveT: 0.5 }
+    let scene = applyCommand(design.scene, { type: "ADD_NODE", node: star as never })
+    scene = applyCommand(scene, { type: "ADD_NODE", node: arrow as never })
+    const withPaths = { ...design, scene, bindings: { ...design.bindings, star: { id: "star", kind: "color" as const }, arrow: { id: "arrow", kind: "color" as const } } }
+    const saved = designToScene(withPaths)
+    expect(saved.issues).toEqual([])
+    expect(saved.scene.layers.map((l) => l.vector?.type)).toEqual(["polygon", "line"])
+    const editor = createCanvas(1920, 1080)
+    await canvas2DRendererBackend.render(ctxOf(editor), buildRenderCommands(scene))
+    const output = drawOutput(saved.scene, 1920, 1080)
+    const a = ctxOf(editor).getImageData(0, 0, 1920, 1080).data
+    const b = ctxOf(output).getImageData(0, 0, 1920, 1080).data
+    let differ = 0
+    for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
+    expect(differ / (1920 * 1080)).toBeLessThan(0.002)
+    // A rule across the whole artboard reaches both edges (its box is cut to the artboard, not squashed).
+    const rule = { ...arrow, id: "rule", x1: 0, y1: 540, x2: 1920, y2: 540, arrowEnd: false, pathType: "straight", curveBulge: 0 }
+    const ruled = designToScene({ ...withPaths, scene: applyCommand(scene, { type: "ADD_NODE", node: rule as never }), bindings: { ...withPaths.bindings, rule: { id: "rule", kind: "color" as const } } })
+    const ruleOut = drawOutput(normalizeScene(ruled.scene)!, 1920, 1080)
+    expect(near(pixel(ruleOut, 4, 540), WHITE)).toBe(true)
+    expect(near(pixel(ruleOut, 1915, 540), WHITE)).toBe(true)
+    // A turned star hanging off the page is refused (outputs would turn it about the part on the page).
+    const offTurned = { ...star, id: "off", x: -100, rotation: 30 }
+    const off = designToScene({ ...withPaths, scene: applyCommand(scene, { type: "ADD_NODE", node: offTurned as never }), bindings: { ...withPaths.bindings, off: { id: "off", kind: "color" as const } } })
+    expect(off.issues).toContainEqual({ nodeId: "off", message: expect.stringContaining("fully on the page") })
+    // Reopened in the editor, they are a polygon and a line again, and save the same.
+    const reopened = sceneToDesign(saved.scene)
+    expect(Object.values(reopened.scene.nodes).map((n) => n.type).filter((t) => t === "polygon" || t === "line").sort()).toEqual(["line", "polygon"])
+    // The same to a tenth of a pixel (the box is kept in rounded percentages).
+    const tenth = (v: unknown) => JSON.stringify(v, (_k, x: unknown) => (typeof x === "number" ? Math.round(x * 10) / 10 : x))
+    expect(tenth(designToScene(reopened).scene.layers.map((l) => l.vector))).toBe(tenth(saved.scene.layers.map((l) => l.vector)))
+  })
+
   it("puts each gradient's colours where the angle says, at 1920×1080 and 1280×720", () => {
     for (const [w, h] of [[1920, 1080], [1280, 720]] as const) {
       const c = drawOutput(painted, w, h)

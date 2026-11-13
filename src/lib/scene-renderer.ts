@@ -7,7 +7,7 @@ import { drawBars, drawStatic, noSignalOf } from "@/lib/no-signal"
 import { layerTurns, turnAbout } from "@/lib/scene-rotation"
 import { applyCanvas2DClipPath, applyCanvas2DEffects, paintCanvas2DStyle, roundedCanvas2DRectPath } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
 import { textLineHeight } from "@/vendor/avnac/saraswati/utils/text"
-import type { ImageDraw, LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, Ticker } from "@/types"
+import type { ImageDraw, LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, SceneVector, Ticker } from "@/types"
 
 export interface SceneDrawOptions {
   /** A loaded picture for a URL, or null while it loads (the caller loads it and redraws). */
@@ -372,9 +372,78 @@ export function feedLayerFresh(canvas: HTMLCanvasElement, l: Pick<SceneLayerFram
   return !!last && last.verse === l.verse && last.theme === l.theme && last.images === images && last.fonts === fontsLoaded && last.w === w && last.h === h
 }
 
+/**
+ * A colour layer's polygon or line (#448), as the Design editor draws it: a polygon's points around
+ * the box's centre, filled and then outlined; a line through the editor's own line drawing (round
+ * caps, arrowheads sized by its width). Sizes are artboard px, scaled with the frame.
+ */
+function paintVector(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, v: SceneVector, r: { x: number; y: number; w: number; h: number }, height: number): void {
+  const k = height / 1080
+  const sx = r.w / v.width, sy = r.h / v.height
+  if (v.type === "polygon") {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2
+    ctx.beginPath()
+    v.points.forEach((p, i) => (i === 0 ? ctx.moveTo(cx + p.x * sx, cy + p.y * sy) : ctx.lineTo(cx + p.x * sx, cy + p.y * sy)))
+    ctx.closePath()
+    ctx.fillStyle = scenePaint(ctx, l.color ?? "#000", l.gradient, r)
+    ctx.fill()
+    if (l.outline) {
+      ctx.strokeStyle = l.outline.color
+      ctx.lineWidth = l.outline.width * k
+      ctx.stroke()
+    }
+    return
+  }
+  // The editor's line drawing (canvas2d/shapes.ts renderCanvas2DLineCommand), here without its
+  // effects step: drawScene already set this layer's shadow and blur, once, scaled with the frame.
+  const color = l.outline?.color ?? l.color ?? "#ffffff"
+  const width = (l.outline?.width ?? 4) * k
+  const x1 = r.x + v.x1 * sx, y1 = r.y + v.y1 * sy, x2 = r.x + v.x2 * sx, y2 = r.y + v.y2 * sy
+  const bulge = v.curveBulge * Math.min(sx, sy)
+  let cpX = (x1 + x2) / 2, cpY = (y1 + y2) / 2
+  const curved = bulge !== 0
+  if (curved) {
+    const len = Math.hypot(x2 - x1, y2 - y1)
+    if (len > 0) {
+      cpX = x1 + v.curveT * (x2 - x1) + bulge * (-(y2 - y1) / len)
+      cpY = y1 + v.curveT * (y2 - y1) + bulge * ((x2 - x1) / len)
+    }
+  }
+  const head = Math.max(5, Math.min(72, Math.max(1, width) * 2.25))
+  const inset = head * 0.65
+  const angle = Math.atan2(y2 - y1, x2 - x1)
+  let dx1 = x1, dy1 = y1, dx2 = x2, dy2 = y2
+  if (v.arrowEnd) { const a = curved ? Math.atan2(y2 - cpY, x2 - cpX) : angle; dx2 = x2 - inset * Math.cos(a); dy2 = y2 - inset * Math.sin(a) }
+  if (v.arrowStart) { const a = curved ? Math.atan2(y1 - cpY, x1 - cpX) : angle + Math.PI; dx1 = x1 - inset * Math.cos(a); dy1 = y1 - inset * Math.sin(a) }
+  ctx.strokeStyle = color
+  ctx.lineWidth = width
+  ctx.lineCap = "round"
+  ctx.lineJoin = "round"
+  ctx.setLineDash([])
+  ctx.beginPath()
+  ctx.moveTo(dx1, dy1)
+  if (curved) ctx.quadraticCurveTo(cpX, cpY, dx2, dy2)
+  else ctx.lineTo(dx2, dy2)
+  ctx.stroke()
+  const arrowhead = (tipX: number, tipY: number, fromX: number, fromY: number) => {
+    const a = Math.atan2(tipY - fromY, tipX - fromX)
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.moveTo(tipX, tipY)
+    ctx.lineTo(tipX - head * Math.cos(a - Math.PI / 7), tipY - head * Math.sin(a - Math.PI / 7))
+    ctx.lineTo(tipX - head * Math.cos(a + Math.PI / 7), tipY - head * Math.sin(a + Math.PI / 7))
+    ctx.closePath()
+    ctx.fill()
+  }
+  if (v.arrowEnd) arrowhead(x2, y2, curved ? cpX : x1, curved ? cpY : y1)
+  if (v.arrowStart) arrowhead(x1, y1, curved ? cpX : x2, curved ? cpY : y2)
+}
+
 /** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
 function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, span: FrameSpan): void {
-  if (l.kind === "color" && !l.corner && !l.outline) {
+  if (l.kind === "color" && l.vector) {
+    paintVector(ctx, l, l.vector, r, height)
+  } else if (l.kind === "color" && !l.corner && !l.outline) {
     ctx.fillStyle = scenePaint(ctx, l.color ?? "#000", l.gradient, r)
     ctx.fillRect(r.x, r.y, r.w, r.h)
   } else if (l.kind === "color" || l.kind === "ellipse") {
@@ -461,6 +530,18 @@ const fadeRegions = new WeakMap<HTMLCanvasElement, Rect>()
  * with its outline, or for text that widens past its box (`textWiden`), the widened block (same height).
  */
 function paintRegion(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: Rect, height: number, span: FrameSpan): Rect {
+  // A polygon or line (#448): its own extent with the box, and room for a pointed outline's mitre
+  // or an arrowhead.
+  if (l.kind === "color" && l.vector) {
+    const v = l.vector, sx = r.w / v.width, sy = r.h / v.height
+    const xs = v.type === "polygon" ? v.points.map((p) => r.x + r.w / 2 + p.x * sx) : [r.x + v.x1 * sx, r.x + v.x2 * sx]
+    const ys = v.type === "polygon" ? v.points.map((p) => r.y + r.h / 2 + p.y * sy) : [r.y + v.y1 * sy, r.y + v.y2 * sy]
+    // A mitred outline can reach about 5× its width past a sharp point.
+    const pad = Math.ceil(((l.outline?.width ?? 0) * 5 + (v.type === "line" ? 72 : 0)) * height / 1080) + 2
+    const x0 = Math.floor(Math.min(r.x, ...xs)) - pad, y0 = Math.floor(Math.min(r.y, ...ys)) - pad
+    const x1 = Math.ceil(Math.max(r.x + r.w, ...xs)) + pad, y1 = Math.ceil(Math.max(r.y + r.h, ...ys)) + pad
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+  }
   // A shape's outline is centred on its edge: half of it lies outside the box (#448).
   if (l.outline && (l.kind === "color" || l.kind === "ellipse")) {
     const half = Math.ceil((l.outline.width * height) / 1080 / 2) + 1
@@ -490,7 +571,8 @@ function paintFading(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: 
   c.save()
   c.clearRect(0, 0, w, h)
   c.translate(-region.x, -region.y)
-  paintLayer(c, { ...l, opacity: 1 }, r, height, opts, span)
+  // Effects go on when this picture is drawn below (drawScene), not into it as well.
+  paintLayer(c, { ...l, opacity: 1, shadow: undefined, blur: undefined }, r, height, opts, span)
   c.restore()
   fadeRegions.set(canvas, region)
   if (from) {

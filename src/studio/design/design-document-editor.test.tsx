@@ -637,6 +637,24 @@ describe("canonical design editor", () => {
     expect(prepared.scene.layers.find((layer) => layer.id === ellipse?.id)?.gradient).toEqual({ angle: 270, stops: [{ color: "#d14c62", offset: 0 }, { color: "#3157a4", offset: 1 }] })
   })
 
+  it("adds a star and an arrow that every output draws (#448)", async () => {
+    const documentValue = documentFixture()
+    store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({ ...documentValue, revision: 5, document: input.document }))
+    const element = await render(documentValue)
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Star")!.click())
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Arrow")!.click())
+    // The selected arrow's colour and width are set from the panel.
+    await act(async () => setValue(element.querySelector<HTMLInputElement>('[aria-label="Line colour"]')!, "#e2b04a"))
+    await act(async () => setValue(element.querySelector<HTMLInputElement>('[aria-label="Line width"]')!, "20"))
+    await act(async () => [...element.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Save draft"))!.click())
+    const saved = store.saveDraft.mock.calls[0]![2] as DesignInput
+    const arrowNode = Object.values(saved.document.scene.nodes).find((node) => node.type === "line")
+    expect(arrowNode).toMatchObject({ stroke: { type: "solid", color: "#e2b04a" }, strokeWidth: 20 })
+    const prepared = designToScene(saved.document)
+    expect(prepared.issues).toEqual([])
+    expect(prepared.scene.layers.map((layer) => layer.vector?.type).filter(Boolean)).toEqual(["polygon", "line"])
+  })
+
   it("edits a Library picture crop, rounded corners and oval mask in the draft and saved output", async () => {
     const documentValue = documentFixture()
     store.saveDraft.mockImplementation(async (_id: string, _revision: number, input: DesignInput) => ({
