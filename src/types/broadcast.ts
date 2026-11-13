@@ -198,6 +198,13 @@ export interface BroadcastTheme {
      * slide, in theme px. Absent: one line of the first language (as before).
      */
     languageGap?: number
+    /**
+     * How a bilingual slide places its two languages (#446): "stacked" (default) one under the
+     * other, "side-by-side" in two columns (the gap between them is `languageGap`), "alternate"
+     * a song's lines interleaved, each first-language line with its second-language line.
+     * Single-language slides look the same in every mode.
+     */
+    bilingual?: "stacked" | "side-by-side" | "alternate"
     /** "stacked" (default): reference + verse flow as one block. "free": each is positioned by its box. */
     mode?: "stacked" | "free"
     referenceBox?: ElementBox

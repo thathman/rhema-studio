@@ -35,6 +35,12 @@ describe("Edit the look (DS-004)", () => {
     expect(lookOf(t)).toMatchObject({ align: "left", background: "#204238", words: "#f5f0e6", accent: "#eecb8d", ratio: "4:3", languageGap: 64 })
     expect(t.verseText.horizontalAlign).toBe("left")
   })
+  it("where the second language goes (#446): stacked unless chosen", () => {
+    expect(lookOf(theme).bilingual).toBe("stacked")
+    const t = applyLook(theme, { bilingual: "side-by-side" })
+    expect(lookOf(t).bilingual).toBe("side-by-side")
+    expect(t.layout.languageGap).toBe(theme.layout.languageGap)
+  })
   it("a visual direction sets background, words and accent in one change; nothing else moves", () => {
     const d = LOOK_DIRECTIONS[2]
     const t = applyDirection(theme, d)

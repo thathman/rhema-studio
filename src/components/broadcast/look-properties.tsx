@@ -1,6 +1,6 @@
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { Button } from "@/components/ui/button"
-import { applyDirection, applyLook, LOOK_DIRECTIONS, LOOK_FONTS, LOOK_RATIOS, LOOK_SIZES, lookOf, type LookChange } from "@/lib/theme-look"
+import { applyDirection, applyLook, BILINGUAL_LAYOUTS, LOOK_DIRECTIONS, LOOK_FONTS, LOOK_RATIOS, LOOK_SIZES, lookOf, type Bilingual, type LookChange } from "@/lib/theme-look"
 import { cn } from "@/lib/utils"
 
 const LABEL = "text-[0.6875rem] font-semibold text-muted-foreground"
@@ -64,6 +64,11 @@ export function LookProperties() {
         <Field label="Text size">
           <select className={SELECT} value={look.size} onChange={(e) => change({ size: e.target.value as typeof look.size })}>
             {LOOK_SIZES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </Field>
+        <Field label="Two languages" hint="Where the second language goes on a bilingual verse or song.">
+          <select aria-label="Two languages" className={SELECT} value={look.bilingual} onChange={(e) => change({ bilingual: e.target.value as Bilingual })}>
+            {BILINGUAL_LAYOUTS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
           </select>
         </Field>
         <Field label="Space between languages" hint="Room between the two languages of a bilingual verse or song.">
