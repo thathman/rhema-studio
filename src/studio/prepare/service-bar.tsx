@@ -319,6 +319,12 @@ export function ServiceBar() {
           </PopoverContent>
         </Popover>
       )}
+      {/* Unsaved items with no service yet: Save is visible from the first item (UX audit slice 8), opening the name-and-date form. */}
+      {!current && count > 0 && (
+        <Button size="sm" onClick={() => { setDupOpen(false); setNewOpen(true) }} title="Name this service and save the items on screen">
+          <SaveIcon /> Save as a service…
+        </Button>
+      )}
       <Popover
         open={newOpen || dupOpen}
         onOpenChange={(open) => {
