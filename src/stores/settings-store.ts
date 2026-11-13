@@ -200,6 +200,7 @@ import { defaultSetup, normalizeSetup, type SetupProfile } from "@/lib/setup-rea
 import { isCountdownTo } from "@/lib/countdown"
 import { newFeedToken } from "@/lib/output-on-air"
 import type { CountdownTo } from "@/types"
+import { setChurchFirstLanguage } from "@/lib/church-languages"
 
 type SttProvider = "deepgram" | "whisper" | "openai"
 type SpeechLanguage = "en" | "yo"
@@ -1157,3 +1158,9 @@ async function persistAll(state: SettingsState): Promise<void> {
     if (!useSettingsStore.getState().settingsSaveFailed) useSettingsStore.setState({ settingsSaveFailed: true })
   }
 }
+
+// New song items show the church's first language first, as hymns do (#446).
+setChurchFirstLanguage(useSettingsStore.getState().hymnFirstLanguage)
+useSettingsStore.subscribe((s, prev) => {
+  if (s.hymnFirstLanguage !== prev.hymnFirstLanguage) setChurchFirstLanguage(s.hymnFirstLanguage)
+})
