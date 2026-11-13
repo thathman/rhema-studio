@@ -195,7 +195,8 @@ export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">Enter previews the first result; Take source live sends it to outputs that follow that source.{bibleFeeds > 0 ? " Bible feeds sends a verse to the feeds that follow Bible only." : ""}</p>
+            {/* Prepare's Add picker says nothing goes live, so it does not repeat Live's Take hint (UX audit P6). */}
+            <p className="mt-2 text-xs text-muted-foreground">{mode === "prepare" ? "Enter picks the first result; Add puts it in the service. Nothing here goes live." : <>Enter previews the first result; Take source live sends it to outputs that follow that source.{bibleFeeds > 0 ? " Bible feeds sends a verse to the feeds that follow Bible only." : ""}</>}</p>
           </li>
         )}
         {busy && results.length === 0 && (
