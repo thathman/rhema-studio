@@ -63,6 +63,8 @@ export interface ReadinessInput {
   missingTranslations?: string[]
   /** Item kinds this build does not recognize because they came from a newer version. */
   unsupportedItems?: number
+  /** Planned words a congregation screen would cut off (#217). */
+  clippedText?: { list: Array<{ what: string; output: string }>; dismiss: string }
   /** Saved items this build recognizes but could not read. */
   corruptItems?: number
   /** The run of show's plan (#196, #213 preflight): absent when the service has no phases. */
@@ -266,6 +268,14 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       : []),
     ...(i.missingTranslations?.length
       ? [{ id: "missing-translations", status: "warn" as const, label: `Some verses are saved for ${i.missingTranslations.join(", ")}, which ${i.missingTranslations.length === 1 ? "is" : "are"} not installed here`, detail: 'They will not show. Install the translation, or turn on "Use my translation" in Live to show them in yours.', fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
+    ...(i.clippedText?.list.length
+      ? (() => {
+          const slides = new Set(i.clippedText.list.map((c) => c.what)).size
+          const shown = i.clippedText.list.slice(0, 4).map((c) => `${c.what} will be cut off on ${c.output}`).join("; ")
+          const more = i.clippedText.list.length > 4 ? `; and ${i.clippedText.list.length - 4} more` : ""
+          return [{ id: "clipped-text", status: "warn" as const, label: `${slides} slide${slides === 1 ? " is" : "s are"} too long for the screen`, detail: `${shown}${more}. Split it into shorter slides, or use a look with smaller words.`, fix: "prepare" as const, fixLabel: "Open Prepare", dismiss: i.clippedText.dismiss }]
+        })()
       : []),
     ...(i.unsupportedItems
       ? [{ id: "unsupported-items", status: "warn" as const, label: `${i.unsupportedItems} item${i.unsupportedItems === 1 ? "" : "s"} from a newer version of Rhema Studio`, detail: "This version cannot show them. Update Rhema Studio on this computer.", fix: "prepare" as const, fixLabel: "Open Prepare" }]

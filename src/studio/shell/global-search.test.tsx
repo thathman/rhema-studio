@@ -136,6 +136,14 @@ describe("Find anything (Cmd/Ctrl+K) and scripture, hymns and songs (#407)", () 
     expect(useBibleStore.getState().selectedSlide).toBeNull()
   })
 
+  it("names each service item with its event, and finds it by the event (#404)", () => {
+    useQueueStore.setState({ items: [welcome], headers: [{ id: "e1", type: "group", name: "Opening prayer", at: 0, event: { schema_version: 1 } }] })
+    useShellStore.setState({ workspace: "home" })
+    act(() => root.render(<GlobalSearch />))
+    type("opening prayer")
+    expect(serviceRow()?.textContent).toContain(`Opening prayer · ${welcome.reference}`)
+  })
+
   it("cues a service item in Live's Preview when chosen in Live, and never Program", () => {
     useQueueStore.setState({ items: [welcome], headers: [] })
     useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
