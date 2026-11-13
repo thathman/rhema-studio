@@ -1,6 +1,6 @@
 import "./broadcast-fonts.css"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
-import { drawScene, drawTickerLayer, LayerFader, sceneArea, sceneOverlay } from "@/lib/scene-renderer"
+import { drawScene, drawTickerLayer, LayerFader, sceneArea, sceneOverlay, type SceneDrawOptions } from "@/lib/scene-renderer"
 import { playerRect, syncSceneVideos, videoReady } from "@/lib/scene-videos"
 import { feedMotion, feedNext, tickerStrips } from "@/lib/feed-motion"
 import { noiseFrame } from "@/lib/no-signal"
@@ -276,25 +276,7 @@ function draw() {
   ctx.clearRect(0, 0, width, height)
   if (f.scene) {
     const strips = onStrips()
-    drawScene(ctx, width, height, f.scene, {
-      now: Date.now() + offset,
-      imageCache: themeImageCache(),
-      camera: (id) => { const p = cameras.get(id); return p?.ready ? p.video : null },
-      video: (id) => { const v = videos.get(id); return videoReady(v) ? v : null },
-      cameraBelow: shownBelow,
-      fader,
-      tickerAbove: (id) => strips.has(id),
-      layerCanvas: (id) => {
-        let c = layers.get(id)
-        if (!c) layers.set(id, (c = document.createElement("canvas")))
-        return c
-      },
-      image: (url) => {
-        const img = themeImageCache().get(url)
-        if (!img) void loadThemeImage(url).then((ok) => { if (ok) redraw() })
-        return img ?? null
-      },
-    })
+    drawScene(ctx, width, height, f.scene, sceneDrawOptions((id) => strips.has(id)))
   } else {
     // No video element here: a video item shows its theme only.
     renderVerse(ctx, f.theme, f.verse?.video ? { ...f.verse, video: undefined } : (f.verse ?? null), { scale: 1, imageCache: themeImageCache() })
@@ -309,6 +291,29 @@ function draw() {
     ctx.globalAlpha = 1 - p
     ctx.drawImage(fade.from, 0, 0, width, height)
     ctx.globalAlpha = 1
+  }
+}
+
+/** How this page draws a scene: its cameras, videos, pictures and fades. */
+function sceneDrawOptions(tickerAbove: (id: string) => boolean): SceneDrawOptions {
+  return {
+    now: Date.now() + offset,
+    imageCache: themeImageCache(),
+    camera: (id) => { const p = cameras.get(id); return p?.ready ? p.video : null },
+    video: (id) => { const v = videos.get(id); return videoReady(v) ? v : null },
+    cameraBelow: shownBelow,
+    fader,
+    tickerAbove,
+    layerCanvas: (id) => {
+      let c = layers.get(id)
+      if (!c) layers.set(id, (c = document.createElement("canvas")))
+      return c
+    },
+    image: (url) => {
+      const img = themeImageCache().get(url)
+      if (!img) void loadThemeImage(url).then((ok) => { if (ok) redraw() })
+      return img ?? null
+    },
   }
 }
 
@@ -358,6 +363,22 @@ function show(next: Frame) {
     from.height = canvas.height
     const fctx = from.getContext("2d")
     fctx?.drawImage(canvas, 0, 0)
+    // Cameras and videos playing under the canvas left holes in it: they go out with the picture
+    // too, drawn under it in their boxes (cropped and turned as the frame draws them).
+    const out = frame?.scene
+    const playing = out ? out.layers.filter((l) => (l.kind === "camera" || l.kind === "video") && shownBelow(l.id)) : []
+    if (fctx && out && playing.length) {
+      const under = document.createElement("canvas")
+      under.width = canvas.width
+      under.height = canvas.height
+      const uctx = under.getContext("2d")
+      if (uctx) {
+        drawScene(uctx, under.width, under.height, { ...out, background: "transparent", backgroundGradient: undefined, layers: playing }, { ...sceneDrawOptions(() => false), cameraBelow: () => false, fader: undefined })
+        fctx.globalCompositeOperation = "destination-over"
+        fctx.drawImage(under, 0, 0)
+        fctx.globalCompositeOperation = "source-over"
+      }
+    }
     // The scene's tickers on strips are part of the picture going out.
     const sf = frame?.scene
     if (fctx && sf) for (const l of sf.layers) {
