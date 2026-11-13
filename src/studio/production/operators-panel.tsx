@@ -265,7 +265,7 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
       {me && role !== "viewer" && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === role)?.may}>as {me.name} · {roleLabel(role)}</span>}
       {viewer && (!me || !REMOTE_ROLES.some((item) => item.id === me.role)) && <span role="status" className="text-muted-foreground">Role not confirmed · showing View only</span>}
       {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
-      {secure === true && <span className="text-muted-foreground" title="This computer checks the main computer's certificate, kept when it paired: compare it with the main computer's card (Live → Production tools → Operators).">Encrypted{fingerprint ? ` · certificate ${certificateWords(fingerprint)}` : ""}</span>}
+      {secure === true && <span className="text-muted-foreground" title="This computer checks the main computer's certificate, kept when it paired: compare it with the main computer's card (Connections → Host the service).">Encrypted{fingerprint ? ` · certificate ${certificateWords(fingerprint)}` : ""}</span>}
       <span className="flex-1" />
       {layout === "card" && (
         <Button size="sm" variant="secondary" title="Show this desk as this computer's Live page" onClick={() => {

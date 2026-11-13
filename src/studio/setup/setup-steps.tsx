@@ -141,7 +141,7 @@ export function OperatorStep({ error, onJoin, idPrefix: p = "setup", nameInDeskM
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-sm font-semibold">Main computer, on its own</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          This computer runs the service with every control. Volunteers, phones and other computers are optional: they can join it later from Live → Production tools → Operators, and if one drops out nothing here changes.
+          This computer runs the service with every control. Volunteers, phones and other computers are optional: they pair with it later in Connections, and if one drops out nothing here changes.
         </p>
         <Button variant="link" className="mt-1 h-auto px-0" onClick={onJoin}>This computer should join another one instead</Button>
       </div>
