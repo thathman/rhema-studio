@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/describe-error"
 import { outputOnAir } from "@/lib/output-on-air"
 import { outputTransportChanged, resolveMonitorIndex } from "@/lib/monitor-health"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -80,7 +81,7 @@ export function BroadcastOutputsDialog({
       return result
     } catch (error) {
       void logError(`[broadcast-ui] availableMonitors FAILED: ${String(error)}`)
-      toast.error("Could not list monitors", { description: String(error) })
+      toast.error("Could not list monitors", { description: describeError(error) })
       return []
     }
   }, [])

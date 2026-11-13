@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/describe-error"
 import { useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
@@ -81,7 +82,7 @@ export const transcriptionActions = {
       await invoke("stop_transcription")
     } catch (e) {
       if (String(e) !== NOT_RUNNING_ERROR) {
-        toast.error("Could not stop transcription", { description: String(e) })
+        toast.error("Could not stop transcription", { description: describeError(e) })
       }
     }
     transcript.setTranscribing(false)
