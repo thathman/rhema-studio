@@ -69,9 +69,8 @@ export function HomeWorkspace() {
       <div className="mx-auto flex max-w-[1700px] flex-col gap-5 px-8 pt-7 pb-16 max-[1200px]:px-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="max-w-full truncate text-[0.625rem] font-extrabold tracking-[0.16em] text-muted-foreground uppercase" title={churchName ? `${churchName} workspace` : "Set up your church"}>{churchName ? `${churchName} workspace` : "Set up your church"}</p>
-            <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">{greeting()}{operatorName ? `, ${operatorName.split(/\s+/)[0]}` : ", team"} <span aria-hidden className="font-semibold text-muted-foreground">✳</span></h1>
-            <p className="mt-1 max-w-[540px] text-xs text-muted-foreground">Everything for this Sunday's service, right where you need it.</p>
+            <p className="eyebrow max-w-full truncate" title={churchName || "Set up your church"}>{churchName || "Set up your church"}</p>
+            <h1 className="mt-1 text-2xl leading-tight font-semibold tracking-tight">{greeting()}{operatorName ? `, ${operatorName.split(/\s+/)[0]}` : ""}</h1>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setWorkspace("archive")}><CalendarDaysIcon /> View services</Button>
@@ -82,15 +81,11 @@ export function HomeWorkspace() {
         {/* The church's setup (#298), only while an essential is missing; this service's readiness stays in "Your attention". */}
         <SetupCard />
 
-        {/* The approved hero (issue #215): a flat, editorial welcome with Sunday's readiness on a note. */}
-        <section aria-labelledby="quick" className="relative grid grid-cols-[minmax(0,1.25fr)_290px] overflow-hidden rounded-[22px] border border-border bg-[#eeede6] dark:bg-card max-[1100px]:grid-cols-1">
-          <div className="relative min-w-0 px-[34px] pt-[34px] pb-7">
-            <p className="text-[0.625rem] font-bold tracking-[0.18em] text-muted-foreground uppercase">{comingUp ? `Coming up · ${comingUp}` : current ? `This service · ${current.title}` : "No service open"}</p>
-            <h2 id="quick" className="mt-2 text-2xl leading-[1.05] font-bold tracking-[-0.045em]">
-              Beautiful worship.
-              <span className="block font-[Georgia,serif] font-bold text-primary-text italic">Without the chaos.</span>
-            </h2>
-            <p className="mt-3 max-w-[590px] text-[0.8125rem] text-muted-foreground">
+        {/* This service, plainly (UX audit decision 9): no slogan, no second readiness card; the stats below carry the counts. */}
+        <section aria-labelledby="quick" className="rounded-lg border border-border bg-card p-5 shadow-panel">
+          <p className="eyebrow">{comingUp ? `Coming up · ${comingUp}` : current ? "This service" : "No service open"}</p>
+          <h2 id="quick" className="mt-1 truncate text-lg font-semibold">{current?.title ?? "No service open"}</h2>
+            <p className="mt-1 max-w-[640px] text-sm text-muted-foreground">
               {!hasPlan
                 ? "Start a service in Prepare: add events, then place passages, songs, hymns, slides and pictures in order. The plan stays separate from Live."
                 : items.length === 0
@@ -98,24 +93,12 @@ export function HomeWorkspace() {
                     ? `${events.length} ${events.length === 1 ? "event is" : "events are"} in the running order, with no moments yet. Continue in Prepare to add content. Plan changes do not change Live on their own.`
                     : "This service is open, but its running order is empty. Add an event in Prepare. Plan changes do not change Live on their own."
                 : ready
-                  ? "Your service is ready. Turn the screens on and take it to the live console with confidence."
-                  : "Your service is taking shape. Finish the final details, then take it to the live console with confidence."}
+                  ? "Your service is ready. Turn the screens on and open Live."
+                  : "Your service is taking shape. Finish the details below, then open Live."}
             </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Button onClick={() => setWorkspace("prepare")}>{hasPlan ? "Continue preparing" : "Prepare a service"} <ArrowRightIcon /></Button>
-              <Button variant="outline" onClick={() => setWorkspace("present")}>Open live console <PlayIcon /></Button>
-            </div>
-          </div>
-          <div className="relative flex items-center justify-center p-6 max-[1100px]:justify-start max-[1100px]:pt-0">
-            <div className="w-full max-w-[235px] rotate-[-2deg] rounded-2xl border border-[#e3e4df] bg-[#fafaf8] px-[18px] py-5 shadow-[0_18px_40px_rgba(40,55,60,0.05)] dark:border-border dark:bg-background">
-              <p className="text-xs text-muted-foreground">Sunday readiness</p>
-              <p className="mt-1 text-[1.5625rem] leading-tight font-bold tracking-[-0.04em]">{ready ? "Ready." : warnings.length <= 2 ? "Almost ready." : "Not ready yet."}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{ready ? "Everything checks out" : `${warnings.length === 1 ? "One thing" : `${warnings.length} things`} to check before service`}</p>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#d7dbd8] dark:bg-muted" role="progressbar" aria-label="Service readiness checks" aria-valuemin={0} aria-valuemax={counted} aria-valuenow={okCount}>
-                <div className="h-full rounded-full bg-primary" style={{ width: `${counted ? (okCount / counted) * 100 : 0}%` }} />
-              </div>
-              <p className="mt-2 text-[0.6875rem] text-muted-foreground">{okCount} of {counted} checks complete</p>
-            </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button onClick={() => setWorkspace("prepare")}>{hasPlan ? "Continue preparing" : "Prepare a service"} <ArrowRightIcon /></Button>
+            <Button variant="outline" onClick={() => setWorkspace("present")}>Open Live <PlayIcon /></Button>
           </div>
         </section>
 

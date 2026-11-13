@@ -227,7 +227,6 @@ describe("Home workspace", () => {
     expect(readinessTile(home)).not.toBeNull()
     expect(readinessTile(home)?.textContent).toContain("1of 2 checks")
     expect(readinessTile(home)?.textContent).toContain("1 to check")
-    expect(home.querySelector('[aria-label="Service readiness checks"]')?.getAttribute("aria-valuemax")).toBe("2")
     expect(home.textContent).toContain("Camera is not sending")
     expect(home.textContent).toContain("OBS is optional when unused")
     expect(home.textContent).toContain("1 other check is fine.")
