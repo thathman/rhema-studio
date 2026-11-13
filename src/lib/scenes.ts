@@ -4,7 +4,7 @@ import { cameraPathOf, cameraSourceId, feedFrame, withCameraPath, type LiveSourc
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
-import type { BroadcastOutput, BroadcastOutputLanguage, BroadcastTheme, LowerThird, NoSignal, Scene, SceneAppearanceSnapshot, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, SceneOutline, SceneShadow, Ticker, VerseRenderData } from "@/types"
+import type { BroadcastOutput, BroadcastOutputLanguage, BroadcastTheme, LowerThird, NoSignal, Scene, SceneAppearanceSnapshot, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, SceneOutline, SceneShadow, SceneVector, Ticker, VerseRenderData } from "@/types"
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 import { countdownTarget, isCountdownTo, type CountdownTargets } from "@/lib/countdown"
 import { normalizeGradient } from "@/lib/scene-gradient"
@@ -269,13 +269,15 @@ export function normalizeScene(raw: unknown): Scene | null {
     // An outline or corner Rhema cannot draw is dropped and the shape is drawn without it (#448).
     const outline = l.kind === "color" || l.kind === "ellipse" ? sceneOutline(l.outline) : undefined
     const corner = l.kind === "color" ? clamp(l.corner, 0, 540, 0) || undefined : undefined
+    // A path Rhema cannot draw is dropped and the layer is drawn as its box (#448).
+    const vector = l.kind === "color" ? sceneVector(l.vector) : undefined
     // A shadow or blur Rhema cannot draw is dropped and the layer is drawn without it (#448).
     const effects = EFFECT_KINDS.has(l.kind) ? { shadow: sceneShadow(l.shadow), blur: typeof l.blur === "number" && l.blur > 0 && l.blur <= 100 ? l.blur : undefined } : { shadow: undefined, blur: undefined }
     // A picture drawing Rhema cannot draw is dropped and the picture covers its box, as before.
     const imageDraw = l.kind === "picture" ? normalizeImageDraw(l.imageDraw) : undefined
     // Upright stays absent; a kind outputs cannot turn (a camera, video or ticker) stays upright.
     const rotation = layerTurns(l.kind) ? layerRotation(l.rotation) : undefined
-    return [{ ...l, rotation, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), gradient, outline, corner, ...effects, imageDraw, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    return [{ ...l, rotation, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), gradient, outline, corner, vector, ...effects, imageDraw, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   const backgroundGradient = normalizeGradient(s.backgroundGradient)
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", ...(backgroundGradient ? { backgroundGradient } : {}), layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.updatedBy === "string" ? { updatedBy: s.updatedBy.trim().slice(0, 60) || null } : s.updatedBy === null ? { updatedBy: null } : {}), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}), ...(designPin(s.design) ? { design: { id: s.design.id, version: s.design.version, ...(s.design.pageId ? { pageId: s.design.pageId } : {}) } } : {}) }
@@ -414,7 +416,23 @@ function contentKey(f: SceneLayerFrame): string {
   // A clock's time moves by itself: only starting, stopping or a different kind of clock is new.
   if (f.kind === "clock") return f.clock?.mode ?? ""
   if (f.kind === "text") return fingerprint(JSON.stringify([f.text, f.fontFamily, f.fontSize, f.fontWeight, f.fontStyle, f.textAlign, f.lineHeight, f.textColor, f.textGradient, f.textOutline, f.underline, f.textWiden]))
-  return f.gradient || f.outline || f.corner ? fingerprint(JSON.stringify([f.gradient, f.color, f.outline, f.corner])) : (f.color ?? "")
+  return f.gradient || f.outline || f.corner || f.vector ? fingerprint(JSON.stringify([f.gradient, f.color, f.outline, f.corner, f.vector])) : (f.color ?? "")
+}
+
+/** A colour layer's polygon or line (#448), as outputs draw it, or none when it is not one. */
+export function sceneVector(raw: unknown): SceneVector | undefined {
+  const v = raw as Record<string, unknown> | null | undefined
+  const num = (x: unknown, lo = -1e5, hi = 1e5): x is number => typeof x === "number" && Number.isFinite(x) && x >= lo && x <= hi
+  if (!v || typeof v !== "object" || !num(v.width, 0.01) || !num(v.height, 0.01)) return undefined
+  if (v.type === "polygon") {
+    const pts = Array.isArray(v.points) ? v.points : []
+    if (pts.length < 3 || pts.length > 64 || !pts.every((p) => p && num((p as { x: unknown }).x) && num((p as { y: unknown }).y))) return undefined
+    return { type: "polygon", width: v.width, height: v.height, points: pts.map((p) => ({ x: (p as { x: number }).x, y: (p as { y: number }).y })) }
+  }
+  if (v.type === "line" && [v.x1, v.y1, v.x2, v.y2, v.curveBulge].every((n) => num(n)) && num(v.curveT, 0, 1)) {
+    return { type: "line", width: v.width, height: v.height, x1: v.x1 as number, y1: v.y1 as number, x2: v.x2 as number, y2: v.y2 as number, arrowStart: v.arrowStart === true, arrowEnd: v.arrowEnd === true, curveBulge: v.curveBulge as number, curveT: v.curveT }
+  }
+  return undefined
 }
 
 /** The kinds outputs draw a shadow and blur on, as the editor does (#448). */
@@ -463,7 +481,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
   function layerFrame(l: SceneLayer): SceneLayerFrame {
     const base = { id: l.id, kind: l.kind, box: l.box, crop: l.crop, opacity: l.opacity, ...(l.rotation ? { rotation: l.rotation } : {}), ...(l.shadow ? { shadow: l.shadow } : {}), ...(l.blur ? { blur: l.blur } : {}) }
     if (l.kind === "feed") return { ...base, ...layerContent(s, output, l) }
-    const shape = { ...(l.gradient ? { gradient: l.gradient } : {}), ...(l.outline ? { outline: l.outline } : {}), ...(l.corner ? { corner: l.corner } : {}) }
+    const shape = { ...(l.gradient ? { gradient: l.gradient } : {}), ...(l.outline ? { outline: l.outline } : {}), ...(l.corner ? { corner: l.corner } : {}), ...(l.vector ? { vector: l.vector } : {}) }
     if (l.kind === "color") return { ...base, color: l.color ?? "#000000", ...shape }
     if (l.kind === "ellipse") return { ...base, color: l.color ?? "#3157a4", ...shape }
     if (l.kind === "picture") return { ...base, imageUrl: l.imageUrl ?? null, ...(l.imageDraw ? { imageDraw: l.imageDraw } : {}), ...(preview && !l.imageUrl ? { label: "Choose a picture" } : {}) }

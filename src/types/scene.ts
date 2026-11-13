@@ -103,6 +103,16 @@ export interface SceneShadow {
   y: number
 }
 
+/**
+ * A colour layer drawn as a Design editor path instead of its box (#448): a polygon or star (its
+ * points around the box's centre, in units of `width` × `height`, filled with the layer's colour
+ * or gradient, outlined by its outline), or a line or arrow (its ends in the box, in units of
+ * `width` × `height`, stroked with its outline's colour and width). Older builds draw the box.
+ */
+export type SceneVector =
+  | { type: "polygon"; width: number; height: number; points: Array<{ x: number; y: number }> }
+  | { type: "line"; width: number; height: number; x1: number; y1: number; x2: number; y2: number; arrowStart: boolean; arrowEnd: boolean; curveBulge: number; curveT: number }
+
 export interface SceneLayer {
   id: string
   name: string
@@ -133,6 +143,8 @@ export interface SceneLayer {
   outline?: SceneOutline
   /** color: rounded corners, px on the 1920×1080 artboard (#448). */
   corner?: number
+  /** color: drawn as this polygon, star, line or arrow instead of its box (#448). */
+  vector?: SceneVector
   /** text: words painted with a gradient over the text box, drawn instead of `textColor` (which older builds show), and an outline behind them, as the editor draws them (#448). */
   textGradient?: SceneGradient
   textOutline?: SceneOutline
@@ -239,6 +251,7 @@ export interface SceneLayerFrame {
   gradient?: SceneGradient
   outline?: SceneOutline
   corner?: number
+  vector?: SceneVector
   textGradient?: SceneGradient
   textOutline?: SceneOutline
   shadow?: SceneShadow
