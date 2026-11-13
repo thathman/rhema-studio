@@ -152,6 +152,14 @@ describe("scene paint on a real canvas", () => {
     // The shadow falls below and right of the card: darker than the white background there.
     const under = pixel(output, 1920 * 0.5 + 20, 1080 * 0.5 + 10)
     expect(under[0]).toBeLessThan(230)
+    // Words: the shadow falls outside the text box, as in the editor, not cut at its edge.
+    const words: Scene = { ...painted, id: "words", backgroundGradient: undefined, background: "#ffffff", layers: [
+      layer("t", "text", { text: "Shadow", fontFamily: "Arial", fontSize: 120, textColor: "#000000", box: { x: 10, y: 10, w: 50, h: 12 }, shadow: { color: "#ff0000", opacity: 1, blur: 0, x: 0, y: 60 } }),
+    ] }
+    const out = drawOutput(words, 1920, 1080)
+    let red = 0
+    for (let x = 192; x < 1152; x += 2) for (let y = 1080 * 0.22 + 10; y < 1080 * 0.22 + 50; y += 2) { const p = pixel(out, x, y); if (p[0] > 200 && p[1] < 80) red++ }
+    expect(red).toBeGreaterThan(20)
     // A stored scene keeps them; a bad shadow is dropped.
     const stored = normalizeScene({ ...shadowed, layers: [...shadowed.layers, layer("bad", "color", { shadow: { color: "black", opacity: 2, blur: -1, x: 0, y: 0 } as never, blur: 900 })] })!
     expect(stored.layers.map((l) => [l.id, l.shadow ?? null, l.blur ?? null])).toEqual([["card", shadowed.layers[0]!.shadow, null], ["soft", null, 30], ["bad", null, null]])
