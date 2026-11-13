@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils"
 import { followsTicker } from "@/lib/live-sources"
 import { Badge } from "@/components/ui/badge"
 import { useShellStore } from "@/studio/shell-store"
+import { useTickerWindow } from "@/stores/ticker-window-store"
+import { useSettingsStore } from "@/stores/settings-store"
 
 /**
  * The news ticker: announcements, one per line, crawling along the outputs
@@ -90,15 +92,48 @@ export function TickerControl() {
             {ticker && pendingItems && <Button size="sm" variant="outline" onClick={() => setPending(null)}>Discard edits</Button>}
             <Button size="sm" variant="outline" className="ml-auto" onClick={() => useShellStore.getState().openDesign("ticker")} title="Design the ticker (Design page)"><PaletteIcon /> Design…</Button>
           </div>
+          <TickerWindowControl />
         </PopoverContent>
       </Popover>
     </>
   )
 }
 
+/**
+ * The ticker on a clock window (#187): armed here by the operator, it takes the ticker at From and
+ * stops it at Until, then is over. Not in rehearsal; not kept when Rhema Studio restarts.
+ */
+function TickerWindowControl() {
+  const armed = useTickerWindow((s) => s.armed)
+  const me = useSettingsStore((s) => s.operatorName.trim()) || "Main computer"
+  const [from, setFrom] = useState("")
+  const [until, setUntil] = useState("")
+  const [why, setWhy] = useState<string | null>(null)
+  return (
+    <div className="mt-3 border-t border-border pt-2 text-xs" role="group" aria-label="Ticker on a clock window">
+      {armed ? (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">Armed: on at {armed.from}, off at {armed.until}{armed.by ? ` (${armed.by})` : ""}</span>
+          <Button size="xs" variant="outline" className="ml-auto" onClick={() => useTickerWindow.getState().disarm(me)}>Disarm</Button>
+        </div>
+      ) : (
+        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); const r = useTickerWindow.getState().arm(from, until, me); setWhy(r); if (!r) { setFrom(""); setUntil("") } }}>
+          <span className="font-medium">On a clock</span>
+          <label className="flex items-center gap-1">from <input type="time" aria-label="Ticker on at" value={from} onChange={(e) => { setFrom(e.target.value); setWhy(null) }} className="h-7 rounded-md border border-input bg-card px-1" /></label>
+          <label className="flex items-center gap-1">until <input type="time" aria-label="Ticker off at" value={until} onChange={(e) => { setUntil(e.target.value); setWhy(null) }} className="h-7 rounded-md border border-input bg-card px-1" /></label>
+          <Button size="xs" type="submit" disabled={!from || !until}>Arm</Button>
+          {why && <span role="alert" className="basis-full text-confidence-mid">{why}</span>}
+          <span className="basis-full text-muted-foreground">It takes and stops the ticker by itself while armed: never in rehearsal, and not kept if Rhema Studio restarts.</span>
+        </form>
+      )}
+    </div>
+  )
+}
+
 /** The ticker in the console: its state, words, and one canonical Take / Stop control. */
 export function TickerRow() {
   const ticker = useBroadcastStore((s) => s.ticker)
+  const armedWindow = useTickerWindow((s) => s.armed)
   const hasWords = useBroadcastStore((s) => s.tickerItems.some((i) => i.trim()))
   const label = useBroadcastStore((s) => s.tickerStyle.label.trim())
   const take = async () => {
@@ -111,6 +146,7 @@ export function TickerRow() {
         <span className="flex items-center gap-2 text-sm font-semibold whitespace-nowrap">
           <span className="max-[1200px]:sr-only">News ticker</span>
           <Badge variant={ticker ? (ticker.pausedAt ? "amber" : "green") : "neutral"}>{ticker ? (ticker.pausedAt ? "Paused" : "On air") : "Standby"}</Badge>
+          {armedWindow && <Badge variant="amber" title={`Armed: the ticker goes on at ${armedWindow.from} and off at ${armedWindow.until}`}>Armed {armedWindow.from}–{armedWindow.until}</Badge>}
         </span>
         {label && <span className="truncate text-[0.6875rem] text-muted-foreground uppercase">{label}</span>}
       </span>
