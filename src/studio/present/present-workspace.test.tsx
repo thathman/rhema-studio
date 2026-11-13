@@ -731,7 +731,7 @@ describe("Present's unified Live console", () => {
     expect(frame.dataset.expanded).toBe("true")
     // The tall panel is a grown grid row: nothing is overlaid, so nothing is hidden or inert.
     expect(frame.className).not.toContain("absolute")
-    expect(element.querySelector('[class*="grid-rows-[minmax(11rem,1fr)_auto_minmax(0,2fr)]"]')?.contains(frame)).toBe(true)
+    expect(element.querySelector('[class*="grid-rows-[minmax(16rem,1fr)_auto_minmax(0,1.4fr)]"]')?.contains(frame)).toBe(true)
     expect(element.querySelector("[inert]")).toBeNull()
     const transport = element.querySelector<HTMLElement>('[role="toolbar"][aria-label="Presentation controls"]')!
     expect(transport).not.toBeNull()
@@ -770,7 +770,9 @@ describe("Present's unified Live console", () => {
     await act(async () => liveTools.click())
 
     expect(liveTools.getAttribute("aria-expanded")).toBe("true")
-    expect(element.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("Production tools")
+    // One row of tabs (UX audit): the production tool itself is named and chosen, here the Timekeeper.
+    expect(element.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("Timekeeper")
+    expect([...element.querySelectorAll('[data-slot="live-tools-panel"] [role="tablist"]')]).toHaveLength(1)
     const controlsTab = [...element.querySelectorAll<HTMLElement>('[data-slot="live-tools-panel"] [role="tab"]')].find((tab) => tab.textContent?.includes("More controls"))!
     await act(async () => {
       controlsTab.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }))

@@ -4,6 +4,18 @@ import { useShellStore } from "@/studio/shell-store"
 export type ProductionTab = "timekeeper" | "screens" | "health" | "programs" | "obs" | "cameras" | "operators"
 export type LiveToolsTab = "bible" | "listening" | "production" | "controls"
 
+/** The production tools, in order; Live's tools dock lists them in its one row of tabs. */
+export const PRODUCTION_TABS: ReadonlyArray<readonly [ProductionTab, string]> = [
+  ["timekeeper", "Timekeeper"],
+  ["screens", "Screens"],
+  ["health", "Show health"],
+  // Scenes (the id stays "programs", so saved links and other pages keep working).
+  ["programs", "Scenes"],
+  ["obs", "OBS"],
+  ["cameras", "Cameras"],
+  ["operators", "Operators"],
+]
+
 /**
  * Another page asking Production to open at a tab (the setup's "Join an existing church host" opens
  * Operators), and, for Scenes (id "programs"), at a scene (Design → Templates' "Customize a copy").

@@ -15,7 +15,7 @@ import { QuickFind } from "@/studio/present/quick-find"
 import { EngageHostControl } from "@/studio/engage/host-control"
 import { useEngageHost } from "@/studio/engage/host-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { liveToolsExpanded, setLiveToolsExpanded, useProductionTab, type LiveToolsTab } from "@/studio/production/production-tab"
+import { liveToolsExpanded, PRODUCTION_TABS, setLiveToolsExpanded, useProductionTab, type LiveToolsTab, type ProductionTab } from "@/studio/production/production-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 
@@ -71,6 +71,7 @@ export function LiveToolsDrawer({
   stripClassName?: string
 }) {
   const isLive = useBroadcastStore((s) => s.isLive)
+  const productionTab = useProductionTab((s) => s.requested ?? s.selected)
   const expanded = useProductionTab((s) => liveToolsExpanded(s, tab, isLive))
   // Engage is deferred (#858 G14): hidden unless this computer turns it on. A room already open stays
   // reachable, so it can always be ended and its data deleted.
@@ -95,10 +96,11 @@ export function LiveToolsDrawer({
         }}
         className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
       >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 py-2">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-1.5">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold tracking-tight">Live tools</h2>
-            <p className="text-xs text-muted-foreground">
+            {/* One line at most under a title (UX audit §5.7): the sentence stays for screen readers. */}
+            <p className="sr-only">
               {tab === "production"
                 ? "Timing, scenes, cameras, OBS and health tools share this Live state. Preview stays private until an explicit action."
                 : tab === "controls"
@@ -127,15 +129,23 @@ export function LiveToolsDrawer({
           </div>
         </div>
         <Tabs
-          value={tab}
-          onValueChange={(value) => onTabChange(value as LiveToolsTab)}
+          value={tab === "production" ? `p:${productionTab}` : tab}
+          onValueChange={(value) => {
+            // One row of tabs (UX audit §5.7): the production tools are named here, not behind a second row.
+            if (value.startsWith("p:")) {
+              useProductionTab.setState({ requested: null, selected: value.slice(2) as ProductionTab })
+              onTabChange("production")
+            } else onTabChange(value as LiveToolsTab)
+          }}
           className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-2"
         >
-          <TabsList aria-label="Live tools" className="mt-2 w-full">
-            <TabsTrigger value="bible"><BookOpenIcon /> Find &amp; cue</TabsTrigger>
-            <TabsTrigger value="listening"><MicIcon /> Listening</TabsTrigger>
-            <TabsTrigger value="production"><MonitorCogIcon /> Production tools</TabsTrigger>
-            <TabsTrigger value="controls"><SlidersHorizontalIcon /> More controls</TabsTrigger>
+          <TabsList aria-label="Live tools" className="mt-2 h-auto w-full flex-wrap justify-start">
+            <TabsTrigger value="bible" className="flex-none"><BookOpenIcon /> Find &amp; cue</TabsTrigger>
+            <TabsTrigger value="listening" className="flex-none"><MicIcon /> Listening</TabsTrigger>
+            {PRODUCTION_TABS.map(([id, label]) => (
+              <TabsTrigger key={id} value={`p:${id}`} className="flex-none">{id === "timekeeper" ? <MonitorCogIcon /> : null}{label}</TabsTrigger>
+            ))}
+            <TabsTrigger value="controls" className="flex-none"><SlidersHorizontalIcon /> More controls</TabsTrigger>
           </TabsList>
           <TabsContent value="bible" className="mt-2 min-h-0 flex-1 overflow-hidden">
             <div className="flex h-full min-h-0 flex-col gap-2" role="region" aria-label="Find Scripture and songs" data-tour="quick-find">
@@ -150,9 +160,11 @@ export function LiveToolsDrawer({
               <DetectionsPanel />
             </div>
           </TabsContent>
-          <TabsContent value="production" className="mt-2 min-h-0 flex-1 overflow-hidden">
-            <ProductionWorkspace embedded expanded={expanded} />
-          </TabsContent>
+          {tab === "production" && (
+            <div role="region" aria-label="Production tool" className="mt-2 min-h-0 flex-1 overflow-hidden">
+              <ProductionWorkspace embedded hideTabs expanded={expanded} />
+            </div>
+          )}
           <TabsContent value="controls" className="mt-2 min-h-0 flex-1 overflow-y-auto">
             <section role="group" aria-label="Secondary Live controls" className="flex flex-col gap-2 rounded-md border border-border bg-surface-sunken p-3">
               <p className="text-xs text-muted-foreground">These controls stay out of the main console until needed. Each shows where its action goes.</p>

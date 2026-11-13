@@ -323,6 +323,9 @@ describe("Live's Rhema recording dock", () => {
         }),
       })
     )
+    // The numbers wait behind Details (UX audit §5.8).
+    expect(host.textContent).not.toContain("HD · 8 Mbps")
+    await act(async () => [...host.querySelectorAll("button")].find((b) => b.textContent === "Details")!.click())
     expect(host.textContent).toContain("HD · 8 Mbps")
     expect(quality.disabled).toBe(true)
   })
@@ -404,6 +407,8 @@ describe("Live's Rhema recording dock", () => {
     })
     expect(host.textContent).toContain("Recording · Overflow")
     expect(host.textContent).toContain("Midas USB")
+    expect(host.textContent).not.toContain("24 frames")
+    await act(async () => [...host.querySelectorAll("button")].find((b) => b.textContent === "Details")!.click())
     expect(host.textContent).toContain("24 frames")
     expect(host.textContent).toContain("1 dropped")
     expect(host.textContent).toContain("Audio receiving")

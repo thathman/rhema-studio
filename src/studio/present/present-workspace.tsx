@@ -215,13 +215,15 @@ export function PresentWorkspace() {
   return (
     <div className="flex h-full flex-col">
       {/* One Live console: Run of show, Preview, Program and Take never change with a view preference. */}
-      <header className="flex shrink-0 flex-col gap-2.5 border-b border-border px-[22px] pt-3.5 pb-3 [@media(max-height:860px)]:gap-1.5 [@media(max-height:860px)]:pt-2 [@media(max-height:860px)]:pb-2">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-[1.4375rem] leading-tight font-bold tracking-[-0.04em] [@media(max-height:860px)]:text-lg">Live console</h1>
-            <p className="truncate text-[0.6875rem] text-muted-foreground">{service ? `${service.title}${startsAt ? ` · starts ${startsAt}` : ""}` : "What is next in your service"}</p>
+      {/* One status row (UX audit §4): what is on air and every status as a pill; tools on the right. */}
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+        <div className="contents">
+          <div className="mr-1 min-w-0 max-w-64">
+            <h1 className="sr-only">Live console</h1>
+            <p className="truncate text-sm font-semibold">{service ? service.title : "No service open"}</p>
+            <p className="truncate text-xs text-muted-foreground">{service ? (startsAt ? `starts ${startsAt}` : "Live") : "What is next in your service"}</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {outputId && congregationOutputs.length > 0 && (
               <label
                 className="flex h-8 min-w-0 items-center gap-2 rounded-full border border-border bg-card px-3 text-xs"
@@ -280,7 +282,7 @@ export function PresentWorkspace() {
           aria-orientation="horizontal"
           onFocusCapture={(event) => syncLiveToolbarTabStop(event.currentTarget)}
           onKeyDown={moveLiveToolbarFocus}
-          className="flex flex-wrap items-center gap-2"
+          className="ml-auto flex flex-wrap items-center justify-end gap-2"
         >
           <Button
             ref={toolsButtonRef}
@@ -399,9 +401,10 @@ function LiveConsoleSurface({
   // #812 F1: the tall Live tools panel takes most of the height; Preview, Program and the transport stay in view.
   const toolsTall = useProductionTab((s) => s.open && liveToolsExpanded(s, s.liveToolsTab, isLive))
   const bottomRow = toolsTall
-    ? "grid-rows-[minmax(11rem,1fr)_auto_minmax(0,2fr)]"
+    ? "grid-rows-[minmax(16rem,1fr)_auto_minmax(0,1.4fr)] [@media(max-height:860px)]:grid-rows-[minmax(12rem,1fr)_auto_minmax(0,1.4fr)]"
     : toolsOpen
-    ? "grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,14.5rem)]"
+    // Preview and Program keep a readable size while tools are open (UX audit S3); the tools take the rest.
+    ? "grid-rows-[minmax(18rem,1fr)_auto_minmax(0,1fr)] [@media(max-height:860px)]:grid-rows-[minmax(14rem,1fr)_auto_minmax(0,1fr)]"
     : "grid-rows-[minmax(6rem,1fr)_auto_minmax(0,10.75rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,10.75rem)]"
 
   const focusQuickFind = () => {
