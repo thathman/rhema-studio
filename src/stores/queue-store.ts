@@ -52,7 +52,7 @@ interface QueueState {
   copyItems: (ids: string[]) => void
   /** Paste copies (new ids) after the item at `afterIndex` in its section; null: as a new item is added. Returns their ids. */
   pasteItems: (afterIndex: number | null) => string[]
-  /** Another rundown's items and sections added after this one's, as one undoable step (an AI draft added to the open service, #252). */
+  /** Another rundown's items and sections added after this one's (before its closing loop, which stays last), as one undoable step (an AI draft added to the open service, #252). */
   appendRundown: (items: QueueItem[], headers: OutlineHeader[]) => void
   /** Remove several items in one step. */
   removeItems: (ids: string[]) => void
@@ -365,10 +365,21 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
     clipboard = items.map((i) => JSON.parse(JSON.stringify(i)) as QueueItem)
     rawSet({ clipboardCount: clipboard.length })
   },
-  appendRundown: (items, headers) => set((state) => ({
-    items: [...state.items, ...items],
-    headers: [...state.headers, ...headers.map((h) => ({ ...h, at: h.at + state.items.length }))],
-  })),
+  appendRundown: (items, headers) => set((state) => {
+    // Before the service's closing loop (its last phase, when that loops), which stays last.
+    const phases = state.headers.map((h, i) => ({ h, i })).filter(({ h }) => h.type === "phase").sort((a, b) => a.h.at - b.h.at || a.i - b.i)
+    const last = phases.at(-1)
+    const loop = last && last.h.rule === "loop" ? last : null
+    const at = loop ? loop.h.at : state.items.length
+    const after = (h: OutlineHeader, i: number) => h.at > at || (loop !== null && h.at === at && i >= loop.i)
+    return {
+      items: [...state.items.slice(0, at), ...items, ...state.items.slice(at)],
+      headers: [
+        ...state.headers.map((h, i) => (after(h, i) ? { ...h, at: h.at + items.length } : h)),
+        ...headers.map((h) => ({ ...h, at: h.at + at })),
+      ],
+    }
+  }),
   pasteItems: (afterIndex) => {
     if (clipboard.length === 0) return []
     const copies = clipboard.map(copyOf)

@@ -71,11 +71,19 @@ export function AiDrafts() {
   // Added after the open service's own items, as its own phases (#252): nothing already planned changes.
   const addDraft = (d: AiDraft) => {
     const { items, headers } = draftToRundown(leaveOut(d, outOf(d)), undefined, names)
-    useQueueStore.getState().appendRundown(items, headers)
+    // Its phases join as plain sections: the service keeps its own main phase, start time and loops.
+    const plain = headers.map((h) => {
+      if (h.type !== "phase") return h
+      const c = { ...h, rule: "manual" as const }
+      delete c.role
+      delete c.starts_at
+      return c
+    })
+    useQueueStore.getState().appendRundown(items, plain)
     setPicking(null)
     setOpen(false)
     void invoke("ai_draft_mark_opened", { id: d.id, by: useSettingsStore.getState().operatorName || null }).catch(() => {}).then(load)
-    toast.success(`${items.length} ${items.length === 1 ? "item" : "items"} from ${d.title} added after this service's own`, { description: "Unsaved: check them, source anything marked Missing, then save. Undo takes them out again." })
+    toast.success(`${items.length} ${items.length === 1 ? "item" : "items"} from ${d.title} added after this service's own, before any closing loop`, { description: "Unsaved: check them, source anything marked Missing, then save. Undo takes them out again." })
   }
   const remove = async (d: AiDraft) => {
     setConfirmRemove(null)

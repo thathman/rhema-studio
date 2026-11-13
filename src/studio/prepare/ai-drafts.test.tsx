@@ -64,11 +64,32 @@ describe("Prepare → AI drafts", () => {
     const q = useQueueStore.getState()
     expect(q.items.map((i) => i.reference)).toEqual(["Mine", "Welcome", "Missing hymn: Now Thank We All Our God"])
     expect(q.headers.map((h) => [h.name, h.at])).toEqual([["Pre-service", 0], ["Main service", 1]])
+    // A plain section: the service keeps its own main phase and start time.
+    expect(q.headers[1]).not.toHaveProperty("role")
+    expect(q.headers[1]).not.toHaveProperty("starts_at")
     expect(document.body.textContent).not.toContain("Replace them with this draft?")
     expect(invoke).toHaveBeenCalledWith("ai_draft_mark_opened", expect.objectContaining({ id: draft.id }))
     q.undo()
     expect(useQueueStore.getState().items.map((i) => i.reference)).toEqual(["Mine"])
     expect(useQueueStore.getState().headers.map((h) => h.name)).toEqual(["Pre-service"])
+  })
+
+  it("adds a draft before the service's closing loop, which stays last (#252)", async () => {
+    drafts = [draft]
+    useSettingsStore.setState({ mcpEnabled: true })
+    const slide = (id: string) => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 })
+    useQueueStore.setState({ items: [slide("Opening"), slide("Notices")] as never, headers: [
+      { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" },
+      { id: "post", type: "phase", name: "Post-service loop", at: 1, rule: "loop" },
+    ] })
+    useQueueStore.getState().resetHistory()
+    await mount()
+    await act(async () => button("Add to this service").click())
+    const q = useQueueStore.getState()
+    expect(q.items.map((i) => i.reference)).toEqual(["Opening", "Welcome", "Missing hymn: Now Thank We All Our God", "Notices"])
+    const sorted = [...q.headers].sort((a, b) => a.at - b.at)
+    expect(sorted.map((h) => [h.name, h.at, h.rule])).toEqual([["Main service", 0, "manual"], ["Main service", 1, "manual"], ["Post-service loop", 3, "loop"]])
+    expect(q.headers.filter((h) => h.role === "main")).toHaveLength(1)
   })
 
   it("lets people untick items and groups, shows how it differs from the open service, and opens only what is ticked", async () => {
