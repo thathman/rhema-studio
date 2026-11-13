@@ -1046,12 +1046,22 @@ function EventClockBar() {
 function RunningLate() {
   const { minutes, by, mode } = useServiceOffset()
   const me = useSettingsStore((s) => s.operatorName.trim()) || "Main computer"
+  // "We'll start at 10:40" (#196): the offset from the main service's planned start, set in one go.
+  const planned = useQueueStore((s) => s.headers.find((h) => h.type === "phase" && h.role === "main")?.starts_at ?? null)
+  const [startAt, setStartAt] = useState("")
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Running late or early">
       <span className="font-semibold">Running</span>
       <Button size="sm" variant="outline" onClick={() => useServiceOffset.getState().adjust(-5, me)}>−5 min</Button>
       <Button size="sm" variant="outline" onClick={() => useServiceOffset.getState().adjust(5, me)}>+5 min</Button>
       {minutes !== 0 && <Button size="sm" variant="ghost" onClick={() => useServiceOffset.getState().reset(me)}>On schedule</Button>}
+      {planned && (
+        <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); if (useServiceOffset.getState().startAt(startAt, planned, me)) setStartAt("") }}>
+          <label className="text-muted-foreground" htmlFor="running-start-at">Service starts at</label>
+          <input id="running-start-at" type="time" value={startAt} onChange={(e) => setStartAt(e.target.value)} className="h-7 rounded-md border border-input bg-card px-1.5" />
+          <Button size="sm" variant="outline" type="submit" disabled={!startAt} title={`Planned ${planned}: the lateness becomes the minutes between them`}>Set</Button>
+        </form>
+      )}
       {/* How the delay reaches what is to come (#196 R3.4). */}
       <select aria-label="How the delay reaches what is to come" value={mode} onChange={(e) => useServiceOffset.getState().setMode(e.target.value === "push" ? "push" : "absorb", me)} className="h-7 rounded-md border border-input bg-card px-1.5">
         <option value="absorb">Pauses take it up</option>

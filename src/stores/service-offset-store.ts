@@ -23,6 +23,11 @@ interface OffsetState {
   /** Move the offset by `delta` minutes (−120 … +240 in all). */
   adjust: (delta: number, by?: string) => void
   reset: (by?: string) => void
+  /**
+   * Running late until a time (#196): the main service now starts at `at` ("HH:MM") instead of its
+   * planned `planned`: the offset becomes the minutes between them (on the same day).
+   */
+  startAt: (at: string, planned: string, by?: string) => boolean
 }
 
 const clamp = (m: number) => Math.max(-120, Math.min(240, Math.round(m)))
@@ -44,6 +49,14 @@ export const useServiceOffset = create<OffsetState>((set, get) => ({
     set({ minutes, by: by ?? null })
     useTimeChange.getState().note(`${delta > 0 ? "+" : "−"}${Math.abs(delta)} min (${words(minutes)})`, by)
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}${words(minutes)} (${delta > 0 ? "+" : "−"}${Math.abs(delta)} min)` })
+  },
+  startAt: (at, planned, by) => {
+    const m = (t: string) => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(t) ? Number(t.split(":")[0]) * 60 + Number(t.split(":")[1]) : null)
+    const a = m(at), p = m(planned)
+    if (a === null || p === null) return false
+    const delta = clamp(a - p) - get().minutes
+    if (delta !== 0) get().adjust(delta, by)
+    return true
   },
   reset: (by) => {
     if (get().minutes === 0) return
