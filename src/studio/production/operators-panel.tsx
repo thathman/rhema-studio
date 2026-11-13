@@ -573,7 +573,7 @@ export function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }
   }
   useEffect(() => {
     if (!startSent) return
-    const t = setTimeout(() => { setStartSent(null); setStartNote("Not set: the main computer says why (the service may have begun, or the time is too far off)") }, Math.max(0, startSent.at + 5000 - Date.now()))
+    const t = setTimeout(() => { setStartSent(null); setStartNote("No change on the main computer: already that late, or it refused and says why there") }, Math.max(0, startSent.at + 5000 - Date.now()))
     return () => clearTimeout(t)
   }, [startSent, offsetNow])
   const events = live.event.targets ?? live.rundown
