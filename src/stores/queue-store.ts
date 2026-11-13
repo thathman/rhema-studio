@@ -368,12 +368,15 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
   appendRundown: (items, headers) => set((state) => {
     // Before the service's closing loop (its last phase, when that loops), which stays last.
     const phases = state.headers.map((h, i) => ({ h, i })).filter(({ h }) => h.type === "phase").sort((a, b) => a.h.at - b.h.at || a.i - b.i)
+    // A closing loop: the last phase loops and comes after a phase that does not (a loop-only
+    // service, such as signage, has no closing loop: the draft goes after everything).
     const last = phases.at(-1)
-    const loop = last && last.h.rule === "loop" ? last : null
+    const loop = last && last.h.rule === "loop" && phases.slice(0, -1).some(({ h }) => h.rule !== "loop") ? last : null
     const at = loop ? loop.h.at : state.items.length
     const after = (h: OutlineHeader, i: number) => h.at > at || (loop !== null && h.at === at && i >= loop.i)
+    // The item on air stays the item on air (its index moves when the draft goes in before it).
     return {
-      items: [...state.items.slice(0, at), ...items, ...state.items.slice(at)],
+      ...withActiveKept(state, [...state.items.slice(0, at), ...items, ...state.items.slice(at)]),
       headers: [
         ...state.headers.map((h, i) => (after(h, i) ? { ...h, at: h.at + items.length } : h)),
         ...headers.map((h) => ({ ...h, at: h.at + at })),
