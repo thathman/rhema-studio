@@ -366,7 +366,7 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
         return refused && !refused.ok ? refused.error : null
       }}
       onQueue={QUEUE_ROLES.has(role) ? (a, event) => queueOnHost(a, event) : undefined}
-        events={(live.event.targets ?? []).filter((t) => t.kind === "event").map((t) => ({ id: t.id, title: t.reference }))}
+      events={(live.event.targets ?? []).filter((t) => t.kind === "event").map((t) => ({ id: t.id, title: t.reference }))}
       scenes={viewer ? [] : live.scenes}
       rundown={live.rundown}
       people={live.crew ?? []}

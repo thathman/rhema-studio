@@ -14,6 +14,8 @@ import type { QueueItem, Verse } from "@/types"
  * when it was added, else why not.
  */
 export async function queueRequest(a: NoticeAction, event?: string | null): Promise<string | null> {
+  // An event the desk chose that the plan no longer has: said so, never put somewhere else (#409).
+  if (event && !useQueueStore.getState().headers.some((h) => h.id === event && h.event)) return "that event is no longer in the plan"
   if (a.kind === "song") {
     const song = await findSongByTitle(a.value)
     if (!song) return "that song is not in the library"
@@ -31,8 +33,8 @@ export async function queueRequest(a: NoticeAction, event?: string | null): Prom
 }
 
 /**
- * Into the plan's event a desk named (#409), at its end; an event no longer in the plan, or none,
- * is where the main desk adds an item. The main desk's own choice of section is left as it was.
+ * Into the plan's event a desk named (#409), at its end; none named: where the main desk adds an
+ * item. The main desk's own choice of section is left as it was.
  */
 function addInto(item: QueueItem, event?: string | null) {
   const q = useQueueStore.getState()

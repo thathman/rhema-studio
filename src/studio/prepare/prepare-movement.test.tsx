@@ -346,7 +346,7 @@ describe("Prepare movement keeps the plan separate from Live", () => {
       const before = active
       await act(async () => keyDown(active, "ArrowDown"))
       // The menu can move focus a frame later (slow CI): wait for it to move before reading it.
-      await vi.waitFor(() => expect(document.activeElement).not.toBe(before), { timeout: 1000 }).catch(() => {})
+      await vi.waitFor(() => expect(document.activeElement).not.toBe(before), { timeout: 300 }).catch(() => {})
       active = document.activeElement as HTMLElement
     }
     expect(active.textContent?.trim()).toBe("Move group down")
