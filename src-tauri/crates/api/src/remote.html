@@ -195,8 +195,10 @@
   // `revision_part`). Just after this phone changed a part, the main computer moves its revision
   // twice (once taking the command, once more when the screens publish it), so for a few seconds
   // this phone's own part is left out of `seen`: a quick second press is not refused as if someone
-  // else had changed it (review of #870).
-  const PART = { song_section: () => "lyrics", timer_start: () => "timer", timer_pause: () => "timer", timer_adjust: () => "timer", event_next: () => "event", event_prev: () => "event", hold: () => "hold", resume: () => "hold", clear_source: (v) => "source:" + v, restore_source: (v) => "source:" + v, queue_request: () => "queue" }
+  // else had changed it (review of #870). Screen steps (song sections) are not listed: the main
+  // computer itself lets one desk's own quick steps through and still refuses a change from
+  // elsewhere (#827), so they always send what they saw.
+  const PART = { timer_start: () => "timer", timer_pause: () => "timer", timer_adjust: () => "timer", event_next: () => "event", event_prev: () => "event", hold: () => "hold", resume: () => "hold", clear_source: (v) => "source:" + v, restore_source: (v) => "source:" + v, queue_request: () => "queue" }
   const OWN_FOR = 5000
   const own = {}
   const seenNow = () => {
