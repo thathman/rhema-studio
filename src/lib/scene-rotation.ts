@@ -37,10 +37,10 @@ export function pointInTurnedBox(p: { x: number; y: number }, r: { x: number; y:
 }
 
 /**
- * Whether a layer of this kind can be turned on outputs. Cameras and videos play in windows of
- * their own over or under the frame, and a browser feed draws a running ticker as a strip of its
- * own: none of those can turn yet, so they stay upright.
+ * Whether a layer of this kind can be turned on outputs. A camera or video turns in the frame, and
+ * on a browser feed its player under the frame turns the same way about its box's centre (#448). A
+ * browser feed draws a running ticker as a strip of its own, which cannot turn yet: it stays upright.
  */
 export function layerTurns(kind: string): boolean {
-  return kind !== "camera" && kind !== "video" && kind !== "ticker"
+  return kind !== "ticker"
 }

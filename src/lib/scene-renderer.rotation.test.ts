@@ -355,16 +355,39 @@ describe("layer rotation (#851 G7)", () => {
     }
   })
 
-  it("refuses to save a turned camera, video or ticker, and outputs never turn one from an older file", () => {
+  it("refuses to save a turned ticker, and outputs never turn one from an older file", () => {
+    const design = sceneToDesign(bar("ticker"))
+    const { issues } = designToScene({ ...design, scene: applyCommand(design.scene, { type: "ROTATE_NODE", id: "bar", rotation: 20 }) })
+    expect(issues).toContainEqual({ nodeId: "bar", message: "Tickers cannot be turned on Rhema outputs yet; set Rotation back to 0" })
+    expect(normalizeScene({ ...bar("ticker"), layers: [{ ...bar("ticker").layers[0], rotation: 20 }] })?.layers[0]?.rotation).toBeUndefined()
+  })
+
+  it("turns a camera or video as the editor does: drawn in the frame, or cut out for the player under a browser feed (#448)", () => {
+    // A playing source: solid red, 200 × 100.
+    const src = createCanvas(200, 100)
+    ctxOf(src).fillStyle = "rgb(220, 30, 30)"
+    ctxOf(src).fillRect(0, 0, 200, 100)
+    Object.assign(src, { videoWidth: 200, videoHeight: 100, readyState: 4 })
     for (const [kind, extra] of [
       ["camera", { cameraUrl: "http://192.168.1.10:8889/pulpit/whep" }],
       ["video", { mediaId: "v1", videoUrl: "asset://v1.mp4", mediaFile: "v1.mp4" }],
-      ["ticker", {}],
     ] as const) {
-      const design = sceneToDesign(bar(kind, extra))
-      const { issues } = designToScene({ ...design, scene: applyCommand(design.scene, { type: "ROTATE_NODE", id: "bar", rotation: 20 }) })
-      expect(issues).toContainEqual({ nodeId: "bar", message: "Cameras, videos and tickers cannot be turned on Rhema outputs yet; set Rotation back to 0" })
-      expect(normalizeScene({ ...bar(kind, extra), layers: [{ ...bar(kind, extra).layers[0], rotation: 20 }] })?.layers[0]?.rotation).toBeUndefined()
+      const saved = turned(bar(kind, extra), 90)
+      expect(saved.layers[0]?.rotation).toBe(90)
+      const scene = normalizeScene(saved)!
+      expect(scene.layers[0]?.rotation).toBe(90)
+      const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {} as never, themes: [] }, { themeId: "t" }, scene)
+      const opts = { image: () => picture as unknown as HTMLImageElement, layerCanvas: () => createCanvas(1, 1) as unknown as HTMLCanvasElement, camera: () => src as unknown as HTMLVideoElement, video: () => src as unknown as HTMLVideoElement }
+      // Turned a quarter about its centre (960, 540): the bar now stands 906–1014 across, 348–732 down.
+      const inFrame = createCanvas(1920, 1080)
+      drawScene(ctxOf(inFrame), 1920, 1080, frame, opts)
+      expect(near(pixel(inFrame, 960, 400), RED), `${kind}: drawn turned`).toBe(true)
+      expect(near(pixel(inFrame, 800, 540), BG), `${kind}: not where it stood upright`).toBe(true)
+      // On a browser feed the player is under the frame: the cut-out turns the same way.
+      const cut = createCanvas(1920, 1080)
+      drawScene(ctxOf(cut), 1920, 1080, frame, { ...opts, cameraBelow: () => true })
+      expect(pixel(cut, 960, 400)[3], `${kind}: cut out turned`).toBe(0)
+      expect(pixel(cut, 800, 540)[3], `${kind}: frame kept outside the turned box`).toBe(255)
     }
   })
 })

@@ -24,12 +24,14 @@ describe("Scene Composer hit-testing of turned layers (#851 G7)", () => {
     expect(at(diagonal, 960 + 150, 540 + 150), "along the turned bar").toBe("bar")
   })
 
-  it("turns about the layer's pivot (a text layer's words), and keeps cameras upright", () => {
+  it("turns about the layer's pivot (a text layer's words), and keeps tickers upright (cameras turn, #448)", () => {
     // Pivot at the top of the box: turned 180° the box swings up above itself.
     const flipped = [bar({ rotation: 180, pivot: { x: 50, y: 45 } })]
     expect(at(flipped, 960, 470)).toBe("bar")
     expect(at(flipped, 960, 560)).toBeNull()
-    expect(at([bar({ kind: "camera", rotation: 90 })], 800, 540), "a camera is never turned").toBe("bar")
+    expect(at([bar({ kind: "ticker", rotation: 90 })], 800, 540), "a ticker is never turned").toBe("bar")
+    expect(at([bar({ kind: "camera", rotation: 90 })], 800, 540), "a camera turns").not.toBe("bar")
+    expect(at([bar({ kind: "camera", rotation: 90 })], 960, 400), "a camera turns").toBe("bar")
   })
 
   it("picks the topmost layer under the pointer", () => {

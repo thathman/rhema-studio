@@ -303,8 +303,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
     }
     const rotation = layerRotation(node.rotation)
     if (rotation !== undefined && !layerTurns(binding.kind)) {
-      // Outputs play these in a window or strip of their own, which cannot turn yet.
-      issues.push({ nodeId: node.id, message: "Cameras, videos and tickers cannot be turned on Rhema outputs yet; set Rotation back to 0" })
+      // A browser feed runs a ticker on a strip of its own, which cannot turn yet.
+      issues.push({ nodeId: node.id, message: "Tickers cannot be turned on Rhema outputs yet; set Rotation back to 0" })
     }
     // A shadow and a blur (#448): drawn on outputs as the editor draws them, on the kinds outputs
     // paint themselves; a camera, video, feed, clock, ticker or lower third has its own drawing.
