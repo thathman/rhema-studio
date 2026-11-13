@@ -1231,6 +1231,21 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().outputFrames.stream.ticker).toBeNull()
   })
 
+  it("turning an output's ticker switch on or off while the ticker runs changes that screen at once", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "foyer", name: "Foyer", type: "ndi", themeId: s.themes[0].id, monitorIndex: 0, ndi: ndiDefaults, ticker: false })
+    useBroadcastStore.setState({ isLive: true, liveVerse: sampleLiveVerse })
+    useBroadcastStore.getState().setTickerItems(["Youth meeting Friday"])
+    useBroadcastStore.getState().setTicker({ backing: null })
+    expect(useBroadcastStore.getState().outputFrames.foyer?.ticker ?? null).toBeNull()
+    useBroadcastStore.getState().updateOutput("foyer", { ticker: true })
+    expect(useBroadcastStore.getState().outputFrames.foyer?.ticker?.items).toEqual(["Youth meeting Friday"])
+    useBroadcastStore.getState().updateOutput("foyer", { ticker: false })
+    expect(useBroadcastStore.getState().outputFrames.foyer?.ticker ?? null).toBeNull()
+    useBroadcastStore.getState().setTicker(null)
+  })
+
   it("saved announcement sets: a set of the same name is replaced; nothing to save without words or a name", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     useBroadcastStore.getState().setTickerItems(["Prayer meeting Wednesday 6:30 PM", ""])
