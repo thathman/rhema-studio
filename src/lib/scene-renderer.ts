@@ -359,14 +359,23 @@ export function feedLayerFresh(canvas: HTMLCanvasElement, l: Pick<SceneLayerFram
 
 /** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
 function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, span: FrameSpan): void {
-  if (l.kind === "color") {
+  if (l.kind === "color" && !l.corner && !l.outline) {
     ctx.fillStyle = scenePaint(ctx, l.color ?? "#000", l.gradient, r)
     ctx.fillRect(r.x, r.y, r.w, r.h)
-  } else if (l.kind === "ellipse") {
-    ctx.fillStyle = scenePaint(ctx, l.color ?? "#3157a4", l.gradient, r)
+  } else if (l.kind === "color" || l.kind === "ellipse") {
+    // As the editor draws a shape (#448): the path, filled, then its outline centred on the edge;
+    // corners and outline are artboard px, scaled with the frame like text.
+    const k = height / 1080
     ctx.beginPath()
-    ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2)
+    if (l.kind === "ellipse") ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2)
+    else roundedCanvas2DRectPath(ctx, r.x, r.y, r.w, r.h, (l.corner ?? 0) * k)
+    ctx.fillStyle = scenePaint(ctx, l.color ?? (l.kind === "ellipse" ? "#3157a4" : "#000"), l.gradient, r)
     ctx.fill()
+    if (l.outline) {
+      ctx.strokeStyle = l.outline.color
+      ctx.lineWidth = l.outline.width * k
+      ctx.stroke()
+    }
   } else if (l.kind === "picture" && l.imageUrl) {
     const img = opts.image(l.imageUrl)
     if (img && img.naturalWidth > 0 && l.imageDraw) drawEditorPicture(ctx, img, l.imageDraw, r)
@@ -433,10 +442,15 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
 const fadeRegions = new WeakMap<HTMLCanvasElement, Rect>()
 
 /**
- * The part of the frame a layer paints into, in the layer's own (unturned) space: its box, or for
- * text that widens past its box (`textWiden`), the widened block (same height).
+ * The part of the frame a layer paints into, in the layer's own (unturned) space: its box, a shape
+ * with its outline, or for text that widens past its box (`textWiden`), the widened block (same height).
  */
 function paintRegion(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: Rect, height: number, span: FrameSpan): Rect {
+  // A shape's outline is centred on its edge: half of it lies outside the box (#448).
+  if (l.outline && (l.kind === "color" || l.kind === "ellipse")) {
+    const half = Math.ceil((l.outline.width * height) / 1080 / 2) + 1
+    return { x: Math.floor(r.x) - half, y: Math.floor(r.y) - half, w: Math.ceil(r.w) + 2 * half + 1, h: Math.ceil(r.h) + 2 * half + 1 }
+  }
   if (l.kind !== "text" || !l.text || !widening(l)) return r
   ctx.save()
   const { left, width } = staticTextLayout(ctx, l, r, height, span)
