@@ -91,7 +91,7 @@ fn without_local_addresses(mut v: Value) -> Value {
     fn walk(v: &mut Value) {
         match v {
             Value::Object(map) => {
-                map.retain(|k, x| !(ADDRESS_KEYS.contains(&k.as_str()) && x.is_string()) && !x.as_str().is_some_and(is_address));
+                map.retain(|k, x| !x.as_str().is_some_and(|t| ADDRESS_KEYS.contains(&k.as_str()) || is_address(t)));
                 map.values_mut().for_each(walk);
             }
             Value::Array(list) => {
