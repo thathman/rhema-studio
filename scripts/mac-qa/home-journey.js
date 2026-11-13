@@ -64,9 +64,10 @@ async function runScenario() {
     stage = "the counter is Service readiness"
     if (!body.includes("Service readiness")) throw new Error("No Service readiness counter on Home")
     if (/content readiness/i.test(body)) throw new Error("Home still labels the counter Content readiness")
-    const progress = document.querySelector('[role="progressbar"][aria-label="Service readiness checks"]')
-    if (!progress) throw new Error("The readiness progress bar has no Service readiness label")
-    const readiness = { ok: Number(progress.getAttribute("aria-valuenow")), counted: Number(progress.getAttribute("aria-valuemax")) }
+    // The counts are on the Service readiness tile ("1 of 2 checks"); Home's hero bar went in UX audit decision 9.
+    const counts = /(\d+)\s*of (\d+) checks?/.exec(body)
+    if (!counts) throw new Error("The Service readiness tile shows no 'N of M checks'")
+    const readiness = { ok: Number(counts[1]), counted: Number(counts[2]) }
     if (!(readiness.ok <= readiness.counted)) throw new Error(`Readiness counts are inconsistent: ${JSON.stringify(readiness)}`)
 
     stage = "on the last item there is no Next"
