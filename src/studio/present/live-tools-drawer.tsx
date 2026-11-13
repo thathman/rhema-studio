@@ -160,10 +160,11 @@ export function LiveToolsDrawer({
               <DetectionsPanel />
             </div>
           </TabsContent>
+          {/* The chosen production tool is this tab's own panel, so its tab's aria-controls points at it. */}
           {tab === "production" && (
-            <div role="region" aria-label="Production tool" className="mt-2 min-h-0 flex-1 overflow-hidden">
+            <TabsContent value={`p:${productionTab}`} className="mt-2 min-h-0 flex-1 overflow-hidden">
               <ProductionWorkspace embedded hideTabs expanded={expanded} />
-            </div>
+            </TabsContent>
           )}
           <TabsContent value="controls" className="mt-2 min-h-0 flex-1 overflow-y-auto">
             <section role="group" aria-label="Secondary Live controls" className="flex flex-col gap-2 rounded-md border border-border bg-surface-sunken p-3">

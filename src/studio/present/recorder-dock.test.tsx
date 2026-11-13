@@ -408,6 +408,8 @@ describe("Live's Rhema recording dock", () => {
     expect(host.textContent).toContain("Recording · Overflow")
     expect(host.textContent).toContain("Midas USB")
     expect(host.textContent).not.toContain("24 frames")
+    // A dropped frame is never hidden: it is the sign of an encoder that cannot keep up.
+    expect(host.textContent).toContain("1 frame dropped")
     await act(async () => [...host.querySelectorAll("button")].find((b) => b.textContent === "Details")!.click())
     expect(host.textContent).toContain("24 frames")
     expect(host.textContent).toContain("1 dropped")

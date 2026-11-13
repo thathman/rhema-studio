@@ -130,7 +130,7 @@ export function ProductionWorkspace({ embedded = false, expanded = false, hideTa
             </button>
           ))}
         </nav>}
-        <div role="tabpanel" aria-label={PRODUCTION_TABS.find(([id]) => id === tab)?.[1]} data-expanded={embedded ? expanded : undefined} className={embedded ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
+        <div role={hideTabs ? undefined : "tabpanel"} aria-label={hideTabs ? undefined : PRODUCTION_TABS.find(([id]) => id === tab)?.[1]} data-expanded={embedded ? expanded : undefined} className={embedded ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
           {/* The full-height sheet (#812 F1) gets the full-page width and spacing of this workspace. */}
           <div className={embedded && expanded ? "mx-auto flex max-w-[1600px] flex-col gap-4 py-2" : "contents"}>
             {tab === "timekeeper" && <Timekeeper embedded={embedded} />}

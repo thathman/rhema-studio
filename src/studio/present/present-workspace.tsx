@@ -221,7 +221,7 @@ export function PresentWorkspace() {
           <div className="mr-1 min-w-0 max-w-64">
             <h1 className="sr-only">Live console</h1>
             <p className="truncate text-sm font-semibold">{service ? service.title : "No service open"}</p>
-            <p className="truncate text-xs text-muted-foreground">{service ? (startsAt ? `starts ${startsAt}` : "Live") : "What is next in your service"}</p>
+            <p className="truncate text-xs text-muted-foreground">{service ? (startsAt ? `starts ${startsAt}` : "What is next in your service") : "What is next in your service"}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {outputId && congregationOutputs.length > 0 && (
@@ -340,7 +340,7 @@ export function PresentWorkspace() {
           )}
           <TakeAttemptNotice attempts={takeAttempts} />
         </div>
-        <OpenModeWarning />
+        <div className="basis-full empty:hidden"><OpenModeWarning /></div>
         {clearPrompt && (
           <div
             role="alert"

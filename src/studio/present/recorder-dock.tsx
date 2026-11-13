@@ -464,6 +464,13 @@ export function RecorderDock() {
           {status?.state === "recording" && (
             <span className="font-mono text-xs tabular-nums text-muted-foreground">{formatDuration(status.elapsedMs)}</span>
           )}
+          {/* Dropped frames are the only sign of an encoder that cannot keep up: never behind Details. */}
+          {status?.state === "recording" && !showDetails && status.video.framesDropped > 0 && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+              <TriangleAlertIcon aria-hidden className="size-3.5" />
+              {status.video.framesDropped} {status.video.framesDropped === 1 ? "frame" : "frames"} dropped
+            </span>
+          )}
           {/* Numbers for when something needs looking into, not for every volunteer (UX audit §5.8). */}
           {status?.state === "recording" && showDetails && (
             <span className="text-xs text-muted-foreground">
