@@ -31,24 +31,17 @@ afterEach(() => {
 })
 
 describe("Engage quiz preparation", () => {
-  it("reports the inserted quiz id to Prepare's shared select and focus path", async () => {
+  it("adds a new, unapproved quiz and reports its id so Prepare opens it in the item editor (UX audit P3)", async () => {
     const onAdded = vi.fn()
     await act(async () => root!.render(<EngageAddPanel onAdded={onAdded} />))
-
-    const prompt = document.querySelector<HTMLTextAreaElement>('textarea[placeholder="What did we learn from today\'s sermon?"]')!
-    await act(async () => setValue(prompt, "Which book was read?"))
-    for (let index = 0; index < 4; index++) {
-      const answer = document.querySelector<HTMLInputElement>(`input[aria-label="Question 1 answer ${index + 1}"]`)!
-      await act(async () => setValue(answer, ["Romans", "Mark", "Luke", "Acts"][index]))
-    }
-    const approval = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!
-    await act(async () => approval.click())
-    const save = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add quiz to service")!
-    await act(async () => save.click())
+    // A picker, not an editor: no question fields here.
+    expect(document.querySelector("textarea")).toBeNull()
+    const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add a new quiz")!
+    await act(async () => add.click())
 
     const inserted = useQueueStore.getState().items[0]
     expect(inserted.id).toBeTruthy()
-    expect(engageFromItem(inserted)).toMatchObject({ title: "Sunday Sermon & Service Recall", reviewed: true })
+    expect(engageFromItem(inserted)).toMatchObject({ reviewed: false })
     expect(onAdded).toHaveBeenCalledWith(inserted.id)
   })
 
