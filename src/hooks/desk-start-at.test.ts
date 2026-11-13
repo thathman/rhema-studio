@@ -17,6 +17,16 @@ describe("a Timekeeper desk's Service starts at (#196)", () => {
     expect(useServiceOffset.getState().minutes).toBe(25)
   })
 
+  it("works during a hold before the start, and not once the service has begun", async () => {
+    const { useHold } = await import("@/stores/hold-store")
+    useQueueStore.setState({ items: [], headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }], activeIndex: null })
+    useServiceOffset.setState({ minutes: 0, by: null })
+    expect(useHold.getState().start("Waiting for the pastor")).toBeNull()
+    expect(startAtFromDesk("10:15")).toBeNull()
+    expect(useServiceOffset.getState().minutes).toBe(15)
+    useHold.getState().resume()
+  })
+
   it("says why when the plan has no start time", () => {
     useQueueStore.setState({ items: [], headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual" }], activeIndex: null })
     expect(startAtFromDesk("10:25")).toBe("the plan has no start time for the main service")

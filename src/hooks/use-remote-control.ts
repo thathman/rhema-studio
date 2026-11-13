@@ -559,6 +559,6 @@ export function startAtFromDesk(at: string, by?: string): string | null {
   const planned = (headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at
   if (!planned) return "the plan has no start time for the main service"
   const run = runStateNow()
-  if (!(run === "idle" || (run === "held" && timingInputNow().firstOnAir == null))) return "the service has begun: use ±5 min"
+  if (!(run === "idle" || (run === "held" && timingInputNow().firstOnAir.size === 0))) return "the service has begun: use ±5 min"
   return useServiceOffset.getState().startAt(at, planned, by) ? null : `${at} is more than 2 hours early or 4 hours late for ${planned}`
 }

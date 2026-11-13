@@ -790,6 +790,7 @@ mod tests {
             RemoteCommand::EventPrev,
             RemoteCommand::EventStart("x".into()),
             RemoteCommand::EventOffset(5),
+            RemoteCommand::EventStartAt("10:40".into()),
             RemoteCommand::TimerStart,
             RemoteCommand::TimerPause,
             RemoteCommand::TimerAdjust(-1),
@@ -884,7 +885,7 @@ mod tests {
             }
         }
 
-        assert_eq!(cmds.len(), 49);
+        assert_eq!(cmds.len(), 50);
         assert_eq!(
             serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#)
                 .unwrap(),

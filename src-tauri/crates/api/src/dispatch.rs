@@ -388,7 +388,7 @@ mod tests {
         assert_eq!(payload, r#"{"by":"Timekeeper","minutes":30}"#, "one step is at most 30 minutes, with who sent it");
         CommandDispatcher::dispatch_as(&RemoteCommand::EventStartAt(" 10:40 ".into()), &sink, "Timekeeper").unwrap();
         assert_eq!(sink.last_event(), ("remote:event_start_at".to_string(), r#"{"at":"10:40","by":"Timekeeper"}"#.to_string()));
-        for bad in ["24:00", "10:60", "1040", "10:4a", "ten forty"] {
+        for bad in ["24:00", "10:60", "1040", "10:4a", "ten forty", "+1:00", "é:00"] {
             assert!(CommandDispatcher::dispatch_as(&RemoteCommand::EventStartAt(bad.into()), &sink, "Timekeeper").is_err(), "{bad}");
         }
         CommandDispatcher::dispatch_as(&RemoteCommand::TimerAdjust(-25), &sink, "Timekeeper").unwrap();

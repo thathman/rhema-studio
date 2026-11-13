@@ -1052,7 +1052,7 @@ function RunningLate() {
   const planned = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
   const { state: run, first } = useServiceTiming()
   // Before anything has gone on air: also during a hold before the start ("we'll start at 10:40").
-  const notBegun = run === "idle" || (run === "held" && first == null)
+  const notBegun = run === "idle" || (run === "held" && first.size === 0)
   const [startAt, setStartAt] = useState("")
   const [startWhy, setStartWhy] = useState<string | null>(null)
   return (
