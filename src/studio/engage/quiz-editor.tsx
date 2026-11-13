@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { PlusIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useQueueStore } from "@/stores/queue-store";
 import type { CueQueueItem } from "@/types";
@@ -99,8 +100,10 @@ function QuizForm({ initial, onSave, saveLabel }: {
   );
 }
 
+/** The Add picker adds a new, unapproved quiz and opens it in the item editor, where it is written and approved (UX audit P3: a picker, not an editor). */
 export function EngageAddPanel({ onAdded }: { onAdded?: (id: string) => void }) {
-  return <QuizForm initial={newEngageQuiz()} saveLabel="Add quiz to service" onSave={(draft) => {
+  const add = () => {
+    const draft = newEngageQuiz();
     const item: CueQueueItem = {
       id: crypto.randomUUID(), kind: "cue", reference: draft.title, confidence: 1,
       source: "manual", added_at: Date.now(), planned_minutes: estimatedEngageMinutes(draft),
@@ -108,8 +111,15 @@ export function EngageAddPanel({ onAdded }: { onAdded?: (id: string) => void }) 
     };
     const id = useQueueStore.getState().addItem(item);
     if (id) onAdded?.(id);
-    toast.success("Quiz added — launch it from Live when ready");
-  }} />;
+    toast.success("Quiz added", { description: "Write its questions and approve it in the item editor; launch it from Live when ready." });
+  };
+  return (
+    <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-card p-4">
+      <p className="text-sm font-semibold">A congregation quiz</p>
+      <p className="max-w-prose text-xs text-muted-foreground">Adds a quiz to the service and opens it in the item editor, where you write its questions and approve it. Nothing goes live from here; you launch it from Live.</p>
+      <Button onClick={add}><PlusIcon /> Add a new quiz</Button>
+    </div>
+  );
 }
 
 export function EngageItemEditor({ item }: { item: CueQueueItem }) {
