@@ -113,7 +113,7 @@ describe("Production control", () => {
     expect(frame().className).toContain("strip-row")
     expect(frame().className).not.toContain("absolute")
     expect(el.querySelector("[inert]")).toBeNull()
-    expect(el.querySelector('[role="tabpanel"][data-expanded="true"]')).not.toBeNull()
+    expect(el.querySelector('[data-slot="live-tools-panel"] [data-expanded="true"]')).not.toBeNull()
     // Esc shrinks to the strip first, then closes.
     const esc = () => el.querySelector('[data-slot="live-tools-panel"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
     await act(async () => esc())

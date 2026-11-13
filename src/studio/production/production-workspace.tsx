@@ -1,3 +1,4 @@
+import { PRODUCTION_TABS } from "@/studio/production/production-tab"
 import { useDismissedChecks } from "@/studio/dismissed-checks"
 import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
 import { OBS_SCREEN, onAir } from "@/lib/wording"
@@ -65,16 +66,6 @@ import { AutomaticReminders } from "@/studio/production/automatic-reminders"
 import { useFixedStartAuto } from "@/stores/fixed-start-auto-store"
 
 type Tab = ProductionTab
-const TABS: ReadonlyArray<readonly [Tab, string]> = [
-  ["timekeeper", "Timekeeper"],
-  ["screens", "Screens"],
-  ["health", "Show health"],
-  // Scenes (the id stays "programs", so saved links and other pages keep working).
-  ["programs", "Scenes"],
-  ["obs", "OBS"],
-  ["cameras", "Cameras"],
-  ["operators", "Operators"],
-]
 
 // On the church's clock (#196 R1.1).
 const hhmm = (ms: number) => timeText(ms, churchTimeZone())
@@ -104,7 +95,7 @@ function Badge({ tone, children }: { tone: "ok" | "warn" | "live" | "off"; child
  * one place. What is not built yet (the two-program parts, #197, #208) says so rather than offer
  * controls that do nothing.
  */
-export function ProductionWorkspace({ embedded = false, expanded = false }: { embedded?: boolean; expanded?: boolean } = {}) {
+export function ProductionWorkspace({ embedded = false, expanded = false, hideTabs = false }: { embedded?: boolean; expanded?: boolean; hideTabs?: boolean } = {}) {
   const requested = useProductionTab((s) => s.requested)
   const selected = useProductionTab((s) => s.selected)
   const tab = requested ?? selected
@@ -124,8 +115,9 @@ export function ProductionWorkspace({ embedded = false, expanded = false }: { em
             <div className="flex flex-wrap gap-2"><Badge tone="ok">This computer</Badge></div>
           </header>
         )}
-        <nav role="tablist" aria-label={embedded ? "Live operation tools" : "Production"} className="flex shrink-0 flex-wrap gap-1 border-b border-border">
-          {TABS.map(([id, label]) => (
+        {/* Inside Live's tools dock the dock's own row names these tools (UX audit: one row of tabs). */}
+        {!hideTabs && <nav role="tablist" aria-label={embedded ? "Live operation tools" : "Production"} className="flex shrink-0 flex-wrap gap-1 border-b border-border">
+          {PRODUCTION_TABS.map(([id, label]) => (
             <button
               key={id}
               type="button"
@@ -137,8 +129,8 @@ export function ProductionWorkspace({ embedded = false, expanded = false }: { em
               {label}
             </button>
           ))}
-        </nav>
-        <div role="tabpanel" aria-label={TABS.find(([id]) => id === tab)?.[1]} data-expanded={embedded ? expanded : undefined} className={embedded ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
+        </nav>}
+        <div role={hideTabs ? undefined : "tabpanel"} aria-label={hideTabs ? undefined : PRODUCTION_TABS.find(([id]) => id === tab)?.[1]} data-expanded={embedded ? expanded : undefined} className={embedded ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
           {/* The full-height sheet (#812 F1) gets the full-page width and spacing of this workspace. */}
           <div className={embedded && expanded ? "mx-auto flex max-w-[1600px] flex-col gap-4 py-2" : "contents"}>
             {tab === "timekeeper" && <Timekeeper embedded={embedded} />}

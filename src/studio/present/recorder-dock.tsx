@@ -141,6 +141,7 @@ function logRecording(label: string): void {
 }
 
 export function RecorderDock() {
+  const [showDetails, setShowDetails] = useState(false)
   const outputs = useBroadcastStore((state) => state.outputs)
   const rehearsal = useBroadcastStore((state) => state.rehearsal)
   const currentProgramId = useServiceStore((state) => state.current?.id ?? null)
@@ -461,8 +462,19 @@ export function RecorderDock() {
             </span>
           )}
           {status?.state === "recording" && (
+            <span className="font-mono text-xs tabular-nums text-muted-foreground">{formatDuration(status.elapsedMs)}</span>
+          )}
+          {/* Dropped frames are the only sign of an encoder that cannot keep up: never behind Details. */}
+          {status?.state === "recording" && !showDetails && status.video.framesDropped > 0 && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+              <TriangleAlertIcon aria-hidden className="size-3.5" />
+              {status.video.framesDropped} {status.video.framesDropped === 1 ? "frame" : "frames"} dropped
+            </span>
+          )}
+          {/* Numbers for when something needs looking into, not for every volunteer (UX audit §5.8). */}
+          {status?.state === "recording" && showDetails && (
             <span className="text-xs text-muted-foreground">
-              {formatDuration(status.elapsedMs)} · {status.video.width}×
+              {status.video.width}×
               {status.video.height} · {status.video.framesWritten} frames ·{" "}
               {status.video.framesDropped} dropped
               {status.file.diskFreeBytes === null
@@ -471,12 +483,18 @@ export function RecorderDock() {
               {` · ${profileLabel}`}
             </span>
           )}
-          {audioLine && (
+          {/* Sound that is not arriving is always said; a healthy level only with the details. */}
+          {audioLine && (showDetails || !(status?.audio.receiving || !status?.audio.deviceId)) && (
             <span
               className={`text-xs ${status?.audio.receiving || !status?.audio.deviceId ? "text-muted-foreground" : "text-amber-700"}`}
             >
               {audioLine}
             </span>
+          )}
+          {status?.state === "recording" && (
+            <Button type="button" variant="ghost" size="xs" aria-expanded={showDetails} onClick={() => setShowDetails((v) => !v)}>
+              {showDetails ? "Hide details" : "Details"}
+            </Button>
           )}
           {status?.sessionActive && status.file.bytes > 0 && (
             <span className="text-xs text-muted-foreground">
