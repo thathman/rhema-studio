@@ -354,9 +354,8 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
     expect(el.textContent).not.toContain("Nothing in the service yet")
 
-    const grouped = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")!
-    await act(async () => grouped.click())
-    expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
+    // Without phases there is one view, so no Simple list / Grouped by phase switch (UX audit P7).
+    expect(el.querySelector('[aria-label="Running order view"]')).toBeNull()
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!.click())
     expect(el.querySelector<HTMLInputElement>('[aria-label="Event title"]')?.value).toBe("Sermon")
     expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
