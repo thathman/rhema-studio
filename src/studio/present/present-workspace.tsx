@@ -97,14 +97,20 @@ export function PresentWorkspace() {
   const warning = useBroadcastStore((s) => s.presentWarning)
   const takeAttempts = useTakeAttemptStore((s) => s.attempts)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  // The pill says LIVE only when a screen really shows it (UX audit S1b): taken with every
+  // congregation output off is "Not on any screen", amber, with the outputs one click away.
+  const screensOn = useBroadcastStore((s) => s.outputs.filter((o) => (o.role ?? "congregation") !== "stage" && outputOnAir(o, s.outputStatus[o.id])).length)
+  const onNoScreen = isLive && !rehearsal && screensOn === 0
   const liveStatusLabel = isLive
-    ? `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef ?? "Screen active"}`
+    ? onNoScreen
+      ? `Not on any screen · ${liveRef ?? "Screen active"}`
+      : `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef ?? "Screen active"}`
     : liveRef
       ? `Off air · Restore shows ${liveRef}`
       : rehearsal
         ? "Rehearsal · nothing live"
         : null
-  const liveStatusTone = rehearsal ? "warn" : isLive ? "live" : "off"
+  const liveStatusTone = rehearsal || onNoScreen ? "warn" : isLive ? "live" : "off"
   const startsAt = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
   const onAir = congregationOutputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
   const closeTools = () => {

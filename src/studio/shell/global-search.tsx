@@ -8,7 +8,7 @@ import { openSettings, type SettingsSection } from "@/lib/settings-dialog"
 import { presentActions } from "@/studio/present-actions"
 import { isImageItem, isSongItem, type QueueItem } from "@/types"
 import { projectRunOfShowEvents } from "@/lib/run-of-show"
-import { openProductionTab } from "@/studio/production/production-tab"
+import { openProductionTab, type ProductionTab } from "@/studio/production/production-tab"
 
 const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string]> = [
   ["home", "Home", <HouseIcon key="i" />, "overview readiness today"],
@@ -47,6 +47,17 @@ const LIBRARY: ReadonlyArray<readonly [LibrarySection, string, string]> = [
   ["files", "Import & export", "import export files backup songs openlyrics"],
 ]
 
+/** The Live tools, each findable by name: OBS, scenes, cameras, timers, operators, screens, health. */
+const LIVE_TOOLS: ReadonlyArray<readonly [ProductionTab, string, string]> = [
+  ["obs", "OBS", "obs stream streaming scenes switch record recording websocket"],
+  ["programs", "Scenes", "scenes program take layout congregation"],
+  ["cameras", "Cameras", "cameras phone camera video feed"],
+  ["timekeeper", "Timekeeper", "timer timers clock countdown hold late service time"],
+  ["operators", "Operators", "operators desks crew phones paired take back control"],
+  ["screens", "Screens", "screens outputs on off feeds tvs"],
+  ["health", "Show health", "health preflight check readiness ndi"],
+]
+
 /** Library sections that search by words handed from here (#407). */
 const FIND_IN: ReadonlyArray<readonly [LibrarySection, string]> = [["hymns", "the Hymn book"], ["songs", "Songs"], ["bible", "the Bible"]]
 
@@ -58,7 +69,7 @@ const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [
   ["audio", "Audio", "microphone input level"],
   ["speech", "Speech Recognition", "listening detection transcript deepgram cloud key api keys whisper"],
   ["display", "Heard verses", "display live behaviour detected verses"],
-  ["remote", "Remote Control", "osc http stream deck phone"],
+  ["remote", "Remote Control", "osc http stream deck phone obs websocket password connect network remote access"],
   ["assistants", "AI assistants", "ai mcp claude assistant drafts"],
   ["data", "Data & Sync", "data sync church folder backup restore"],
   ["diagnostics", "Diagnostics", "logs support export"],
@@ -146,7 +157,10 @@ export function GlobalSearch() {
           {PLACES.map(([w, label, icon, words]) => (
             <CommandItem key={w} value={`${label} ${words}`} onSelect={() => run(() => useShellStore.getState().goTo(w))}>{icon} {label}</CommandItem>
           ))}
-          <CommandItem value="Live tools production control timekeeper timers hold screens outputs ndi health preflight cameras OBS operators" onSelect={() => run(() => openProductionTab("health"))}><MonitorCogIcon /> Live tools · Show health</CommandItem>
+          {/* Each Live tool by its own name (UX audit S1e): "obs" finds OBS, not a health page. */}
+          {LIVE_TOOLS.map(([tab, label, words]) => (
+            <CommandItem key={tab} value={`${label} ${words}`} onSelect={() => run(() => openProductionTab(tab))}><MonitorCogIcon /> Live · {label}</CommandItem>
+          ))}
           {/* Services are built in Prepare only (#299): a new one starts there too. */}
           <CommandItem value="new service create sunday plan prepare" onSelect={() => run(() => { useShellStore.getState().setNewServiceOpen(true); useShellStore.getState().goTo("prepare") })}><PlusIcon /> New service</CommandItem>
           <CommandItem value="outputs screens projector ndi stage signage monitor" onSelect={() => run(() => useShellStore.getState().openOutputs())}><MonitorIcon /> Outputs</CommandItem>
