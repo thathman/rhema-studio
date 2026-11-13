@@ -17,7 +17,7 @@ import {
   type SaraswatiTextNode,
 } from "../vendor/avnac/saraswati"
 import { anchorToCenter } from "../vendor/avnac/saraswati/transform/anchor"
-import type { CountdownTo, DesignPin, Scene, SceneCrop, SceneGradient, SceneLayer } from "../types/scene"
+import type { CountdownTo, DesignPin, Scene, SceneCrop, SceneGradient, SceneLayer, SceneShadow } from "../types/scene"
 import { gradientCss, gradientFallback, gradientIssue, normalizeGradient } from "../lib/scene-gradient"
 import { imageDrawIssue, normalizeImageDraw } from "../lib/scene-image"
 import { layerRotation, layerTurns } from "../lib/scene-rotation"
@@ -81,6 +81,9 @@ function basePaint(layer: SceneLayer) {
     opacity: layer.opacity,
     originX: "left" as const,
     originY: "top" as const,
+    // Its shadow and blur reopen in the editor as the editor's own (#448).
+    ...(layer.shadow ? { shadow: { colorHex: layer.shadow.color, opacityPct: Math.round(layer.shadow.opacity * 1000) / 10, blur: layer.shadow.blur, offsetX: layer.shadow.x, offsetY: layer.shadow.y } } : {}),
+    ...(layer.blur ? { blur: layer.blur } : {}),
   }
 }
 
@@ -300,8 +303,12 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       // Outputs play these in a window or strip of their own, which cannot turn yet.
       issues.push({ nodeId: node.id, message: "Cameras, videos and tickers cannot be turned on Rhema outputs yet; set Rotation back to 0" })
     }
-    if (node.shadow || (node.blur ?? 0) > 0) {
-      issues.push({ nodeId: node.id, message: "Layer shadow and blur cannot be saved into a Rhema scene yet" })
+    // A shadow and a blur (#448): drawn on outputs as the editor draws them, on the kinds outputs
+    // paint themselves; a camera, video, feed, clock, ticker or lower third has its own drawing.
+    const effects = layerEffects(node)
+    if ("issue" in effects) issues.push({ nodeId: node.id, message: effects.issue })
+    else if ((effects.shadow || effects.blur) && !EFFECT_KINDS.has(binding.kind)) {
+      issues.push({ nodeId: node.id, message: "Shadow and blur are drawn on shapes, words and pictures; this live layer cannot have them yet" })
     }
     // The unturned box: outputs turn the layer about its centre, as the editor does.
     const textBounds = node.type === "text" ? getNodeBounds({ ...node, rotation: 0 }) : null
@@ -327,6 +334,12 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
     } as SceneLayer
     delete layer.rotation
     if (rotation !== undefined) layer.rotation = rotation
+    delete layer.shadow
+    delete layer.blur
+    if (!("issue" in effects) && EFFECT_KINDS.has(binding.kind)) {
+      if (effects.shadow) layer.shadow = effects.shadow
+      if (effects.blur) layer.blur = effects.blur
+    }
     if (node.type === "text") {
       if (binding.kind !== "text") {
         issues.push({ nodeId: node.id, message: "A text layer needs a Rhema static-text binding" })
@@ -633,5 +646,24 @@ function shapeOutline(
     out.outline = { color: stroke.color, width: Math.round(w * 100) / 100 }
   }
   if (radius) out.corner = Math.min(540, Math.round(radius * scale * 100) / 100)
+  return out
+}
+
+/** The kinds whose drawing outputs do themselves, so a shadow and a blur apply as in the editor (#448). */
+const EFFECT_KINDS = new Set(["color", "ellipse", "text", "picture", "logo"])
+
+/** A node's shadow and blur as outputs draw them (#448): a #rrggbb shadow, blur 0–200 px, offsets ±500 px; blur 0–100 (%). */
+function layerEffects(node: { shadow?: { colorHex: string; opacityPct: number; blur: number; offsetX: number; offsetY: number } | null; blur?: number }): { shadow?: SceneShadow; blur?: number } | { issue: string } {
+  const out: { shadow?: SceneShadow; blur?: number } = {}
+  const s = node.shadow
+  if (s) {
+    const ok = TEXT_COLOR.test(s.colorHex) && [s.opacityPct, s.blur, s.offsetX, s.offsetY].every(Number.isFinite)
+      && s.opacityPct >= 0 && s.opacityPct <= 100 && s.blur >= 0 && s.blur <= 200 && Math.abs(s.offsetX) <= 500 && Math.abs(s.offsetY) <= 500
+    if (!ok) return { issue: "This shadow cannot be drawn on Rhema outputs: a #rrggbb colour, blur up to 200 px and offsets up to 500 px" }
+    if (s.opacityPct > 0) out.shadow = { color: s.colorHex.toLowerCase(), opacity: round(s.opacityPct / 100), blur: round(s.blur), x: round(s.offsetX), y: round(s.offsetY) }
+  }
+  const blur = node.blur ?? 0
+  if (!Number.isFinite(blur) || blur < 0 || blur > 100) return { issue: "Blur must be 0–100 for Rhema outputs" }
+  if (blur > 0) out.blur = round(blur)
   return out
 }
