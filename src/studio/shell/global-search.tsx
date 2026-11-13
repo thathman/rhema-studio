@@ -46,6 +46,9 @@ const LIBRARY: ReadonlyArray<readonly [LibrarySection, string, string]> = [
   ["files", "Import & export", "import export files backup songs openlyrics"],
 ]
 
+/** Library sections that search by words handed from here (#407). */
+const FIND_IN: ReadonlyArray<readonly [LibrarySection, string]> = [["hymns", "the Hymn book"], ["songs", "Songs"], ["bible", "the Bible"]]
+
 const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [
   ["appearance", "Appearance", "light dark mode system theme night preferences"],
   ["church", "Church and profile", "church name campus ministry time zone your name operator computer name profile"],
@@ -94,12 +97,23 @@ export function GlobalSearch() {
     f()
   }
   return (
-    <CommandDialog open={open} onOpenChange={(o) => (o ? useShellStore.getState().setSearchOpen(true) : close())} title="Find anything" description="Places, settings and this service here; scripture, hymns and songs open in Live’s Quick find as previews" className="sm:max-w-xl">
+    <CommandDialog open={open} onOpenChange={(o) => (o ? useShellStore.getState().setSearchOpen(true) : close())} title="Find anything" description="Places, settings and this service here; scripture, hymns and songs open in the Library, or in Live’s Quick find as previews" className="sm:max-w-xl">
       {/* cmdk needs its root around the input and list (this dialog does not add one). */}
       <Command filter={accentFreeFilter}>
       <CommandInput placeholder="Find a place, a setting, an item, a verse or a song…" value={query} onValueChange={setQuery} />
       <CommandList>
-        <CommandEmpty>Nothing here by that name. Type two letters or more to look in scripture, hymns and songs in Live.</CommandEmpty>
+        <CommandEmpty>Nothing here by that name. Type two letters or more to look in scripture, hymns and songs.</CommandEmpty>
+        {query.trim().length > 1 && (
+          // In the Library (#407): found there, previewed there; nothing reaches Live.
+          <CommandGroup heading="Scripture, hymns and songs (in the Library)">
+            {FIND_IN.map(([section, label]) => (
+              <CommandItem key={section} value={`library find ${section} ${query}`} onSelect={() => run(() => useShellStore.getState().findInLibrary(section, query.trim()))}>
+                <LibraryBigIcon /> <span className="truncate">Find “{query.trim()}” in {label}</span>
+                <span className="ml-auto shrink-0 text-xs text-muted-foreground">opens the Library</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
         {query.trim().length > 1 && (
           <CommandGroup heading="Scripture, hymns and songs (in Live)">
             <CommandItem value={`find ${query}`} onSelect={() => run(() => useShellStore.getState().findInPresent(query.trim()))}>

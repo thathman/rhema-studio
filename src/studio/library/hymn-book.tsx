@@ -14,6 +14,7 @@ import { CAC_PARTS, cacNumber, importCacHymnbook, listCacHymns, searchCacHymns, 
 import { SongEditor } from "@/studio/prepare/song-editor"
 import { isSongItem, type SongSummary } from "@/types"
 import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
+import { useLibraryFind } from "@/studio/shell-store"
 
 interface Hymn {
   song: SongSummary
@@ -62,6 +63,7 @@ export function HymnBook({ onAdded, onUseItem, privatePreview = false }: { onAdd
   const [hymns, setHymns] = useState<Hymn[] | null>(null)
   const [part, setPart] = useState<CacPart>(1)
   const [query, setQuery] = useState("")
+  useLibraryFind("hymns", setQuery)
   const [wordSearch, setWordSearch] = useState<WordSearchState | null>(null)
   const [wordSearchRetry, setWordSearchRetry] = useState(0)
   const [busy, setBusy] = useState(false)

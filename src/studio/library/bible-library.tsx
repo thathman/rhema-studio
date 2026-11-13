@@ -9,6 +9,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 import { toast } from "sonner"
 import type { Book } from "@/types"
+import { useLibraryFind } from "@/studio/shell-store"
 
 function manualVerseItem(
   verse: import("@/types").Verse,
@@ -48,6 +49,7 @@ export function BibleLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
   const [found, setFound] = useState<import("@/types").Verse | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  useLibraryFind("bible", (q) => { queryRef.current = q; setQuery(q); setFound(null); setMessage(null) })
   const [savedEditionBooks, setSavedEditionBooks] = useState<
     Record<number, Book[] | null>
   >({})

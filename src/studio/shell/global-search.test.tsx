@@ -24,7 +24,7 @@ beforeEach(() => {
   element = document.createElement("div")
   document.body.appendChild(element)
   root = createRoot(element)
-  useShellStore.setState({ searchOpen: true, pendingFind: null, goRequest: null })
+  useShellStore.setState({ searchOpen: true, pendingFind: null, libraryFind: null, goRequest: null })
 })
 
 afterEach(() => {
@@ -63,6 +63,19 @@ describe("Find anything (Cmd/Ctrl+K) and scripture, hymns and songs (#407)", () 
     expect(shell.pendingFind).toBe("jn 3 16")
     expect(shell.goRequest).toBe("present")
     expect(shell.searchOpen).toBe(false)
+    expect(useBroadcastStore.getState().liveItemId).toBe(liveBefore)
+  })
+
+  it("finds hymns, songs and scripture in the Library, leaving Live alone (#407)", () => {
+    const liveBefore = useBroadcastStore.getState().liveItemId
+    act(() => root.render(<GlobalSearch />))
+    type("abide with me")
+    const row = [...document.querySelectorAll("[cmdk-item]")].find((el) => el.textContent?.includes("in the Hymn book")) as HTMLElement
+    expect(row.textContent).toContain("Find “abide with me” in the Hymn book")
+    expect([...document.querySelectorAll("[cmdk-item]")].some((el) => el.textContent?.includes("in Songs"))).toBe(true)
+    expect([...document.querySelectorAll("[cmdk-item]")].some((el) => el.textContent?.includes("in the Bible"))).toBe(true)
+    act(() => row.click())
+    expect(useShellStore.getState()).toMatchObject({ libraryFind: { section: "hymns", query: "abide with me" }, librarySection: "hymns", goRequest: "library", pendingFind: null, searchOpen: false })
     expect(useBroadcastStore.getState().liveItemId).toBe(liveBefore)
   })
 

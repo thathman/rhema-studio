@@ -14,6 +14,7 @@ import { isChoir } from "@/lib/song-kind"
 import { isSongItem, type QueueItem, type SongSummary } from "@/types"
 import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 import { LoadFailedRow } from "@/studio/library/load-failed-row"
+import { useLibraryFind } from "@/studio/shell-store"
 
 const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI", custom: "Custom", unknown: "Licence?" }
 
@@ -68,6 +69,7 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => search(value), 180)
   }
+  useLibraryFind("songs", onChange)
 
   const add = (song: SongSummary) => {
     const item: QueueItem = songQueueItem(song)

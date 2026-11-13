@@ -128,6 +128,7 @@ import type { QueueItem } from "@/types"
 import { SongLibrary } from "@/studio/library/song-library"
 import { AddItems } from "@/studio/prepare/add-items"
 import { ItemEditor } from "@/studio/prepare/item-editor"
+import { useShellStore } from "@/studio/shell-store"
 
 const slide = (id: string): QueueItem => ({
   id,
@@ -168,6 +169,20 @@ afterEach(() => {
   act(() => root?.unmount())
   root = null
   document.body.replaceChildren()
+})
+
+describe("SongLibrary takes words from Find anything (#407)", () => {
+  it("fills its search once, on opening and while open", async () => {
+    useShellStore.setState({ libraryFind: { section: "songs", query: "amazing" } })
+    await act(async () => root!.render(<SongLibrary />))
+    const input = document.querySelector('input[aria-label="Find a song"]') as HTMLInputElement
+    expect(input.value).toBe("amazing")
+    expect(useShellStore.getState().libraryFind).toBeNull()
+    await act(async () => useShellStore.setState({ libraryFind: { section: "hymns", query: "abide" } }))
+    expect(input.value).toBe("amazing")
+    await act(async () => useShellStore.setState({ libraryFind: { section: "songs", query: "grace" } }))
+    expect(input.value).toBe("grace")
+  })
 })
 
 describe("SongLibrary Add to a selected phase (#384)", () => {
