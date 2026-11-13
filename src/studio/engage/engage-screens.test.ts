@@ -4,14 +4,13 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emit: vi.fn(async () => {}), emitTo: vi.fn(async () => {}) }))
 
 import { engageSlide, type EngagePublicState } from "@/lib/engage-screen"
-import { showEngageOnScreens, stopFollowingEngage, useEngageScreens } from "@/studio/engage/engage-screens"
+import { engageOnLive, showEngageOnScreens, showEngageScores, stopFollowingEngage, useEngageScreens } from "@/studio/engage/engage-screens"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { presentActions } from "@/studio/present-actions"
 
 const base: EngagePublicState = { title: "Acts quiz", code: "ABCD", phase: "lobby", deadline: null, questionIndex: 0, questionCount: 3, answerCount: 0, playerCount: 1, question: null, leaderboard: null }
 const q = { prompt: "Who preached at Pentecost?", choices: ["Peter", "Paul", "John", "James"], correctIndex: 0, reference: "Acts 2:14" }
 const session = { endpoint: "https://quiz.test", code: "ABCD", hostToken: "t", joinUrl: "https://quiz.test/j/ABCD", screenUrl: "https://quiz.test/s/ABCD" } as never
-const settle = () => new Promise<void>((r) => setTimeout(r, 0))
 
 describe("the quiz slide (#425 stage 2)", () => {
   it("shows the join link and code in the lobby", () => {
@@ -40,35 +39,48 @@ describe("the quiz slide (#425 stage 2)", () => {
 
 describe("following the quiz on Live", () => {
   let state: EngagePublicState
+  const settle = () => vi.advanceTimersByTimeAsync(0)
+  const tick = () => vi.advanceTimersByTimeAsync(1700)
+  const live = () => useBroadcastStore.getState().liveVerse
+  const fetch = async () => ({ state, offsetMs: 0 })
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
+    vi.useFakeTimers()
     state = { ...base }
-    useBroadcastStore.setState({ liveVerse: null, heldLive: null, isLive: false })
+    useBroadcastStore.setState({ liveVerse: null, heldLive: null, isLive: false, cleared: false })
     useBroadcastStore.getState().setLiveVerse({ kind: "slide", reference: "Welcome", segments: [{ text: "Welcome" }], lines: ["Welcome"] }, null, { goLive: true })
   })
   afterEach(() => { stopFollowingEngage(); vi.useRealTimers() })
 
   it("goes up as a quick screen, follows the game, and Back returns what was on", async () => {
-    showEngageOnScreens(session, async () => ({ state, offsetMs: 0 }))
+    showEngageOnScreens(session, fetch)
     await settle()
-    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Quiz · Acts quiz")
+    expect(live()?.reference).toBe("Quiz · Acts quiz")
     state = { ...base, phase: "question", question: q }
-    vi.advanceTimersByTime(1700)
-    await settle()
-    expect(useBroadcastStore.getState().liveVerse?.lines?.[1]).toBe("A. Peter")
+    await tick()
+    expect(live()?.lines?.[1]).toBe("A. Peter")
+    expect(engageOnLive()).toBe(true)
     stopFollowingEngage()
     presentActions.back()
-    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Welcome")
+    expect(live()?.reference).toBe("Welcome")
   })
 
-  it("stops following once something else goes on Live", async () => {
-    showEngageOnScreens(session, async () => ({ state, offsetMs: 0 }))
+  it("stops following once something else goes on Live, or the screens are cleared", async () => {
+    showEngageOnScreens(session, fetch)
     await settle()
     useBroadcastStore.getState().setLiveVerse({ kind: "slide", reference: "Notices", segments: [{ text: "Notices" }], lines: ["Notices"] }, null, { goLive: true })
+    expect(engageOnLive()).toBe(false)
     state = { ...base, phase: "question", question: q }
-    vi.advanceTimersByTime(1700)
+    await tick()
+    expect(live()?.reference).toBe("Notices")
+    expect(useEngageScreens.getState().following).toBe(false)
+    // Cleared mid-quiz: the next question never puts the quiz back on air.
+    state = { ...base }
+    showEngageOnScreens(session, fetch)
     await settle()
-    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Notices")
+    useBroadcastStore.getState().setLive(false)
+    state = { ...base, phase: "reveal", question: q }
+    await tick()
+    expect(useBroadcastStore.getState().isLive).toBe(false)
     expect(useEngageScreens.getState().following).toBe(false)
   })
 
@@ -77,9 +89,33 @@ describe("following the quiz on Live", () => {
     showEngageOnScreens(session, async () => { if (fail) throw new Error("offline"); return { state, offsetMs: 0 } })
     await settle()
     fail = true
-    vi.advanceTimersByTime(1700)
-    await settle()
-    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Quiz · Acts quiz")
+    await tick()
+    expect(live()?.reference).toBe("Quiz · Acts quiz")
     expect(useEngageScreens.getState()).toMatchObject({ following: true, error: "offline" })
+  })
+
+  it("a late answer from an earlier Show changes nothing, and polls never stack up", async () => {
+    let release: (v: { state: EngagePublicState; offsetMs: number }) => void = () => {}
+    let calls = 0
+    showEngageOnScreens(session, () => { calls++; return new Promise((r) => { release = r }) })
+    await tick(); await tick()
+    expect(calls).toBe(1)
+    stopFollowingEngage()
+    release({ state: { ...base, title: "Old room" }, offsetMs: 0 })
+    await settle()
+    expect(live()?.reference).toBe("Welcome")
+    expect(useBroadcastStore.getState().heldLive).toBeNull()
+  })
+
+  it("holds the scores (people's nicknames) until the operator shows them", async () => {
+    showEngageOnScreens(session, fetch)
+    await settle()
+    state = { ...base, phase: "finished", leaderboard: [{ rank: 1, nickname: "Ade", points: 900 }] }
+    await tick()
+    expect(live()?.reference).toBe("Quiz · Acts quiz")
+    expect(useEngageScreens.getState().scoresWaiting).toBe(true)
+    showEngageScores()
+    expect(live()?.lines).toEqual(["1. Ade · 900 points"])
+    expect(useEngageScreens.getState().scoresWaiting).toBe(false)
   })
 })
