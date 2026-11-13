@@ -69,7 +69,7 @@ const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [
   ["audio", "Audio", "microphone input level"],
   ["speech", "Speech Recognition", "listening detection transcript deepgram cloud key api keys whisper"],
   ["display", "Heard verses", "display live behaviour detected verses"],
-  ["remote", "Remote Control", "osc http stream deck phone obs websocket password connect network remote access"],
+  ["remote", "Network & remote access", "osc http stream deck phone obs websocket password connect network remote access"],
   ["assistants", "AI assistants", "ai mcp claude assistant drafts"],
   ["data", "Data & Sync", "data sync church folder backup restore"],
   ["diagnostics", "Diagnostics", "logs support export"],

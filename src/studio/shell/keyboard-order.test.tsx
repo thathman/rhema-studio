@@ -91,7 +91,8 @@ describe("keyboard order (#215)", () => {
       </>,
     )
     await act(async () => document.querySelector<HTMLButtonElement>("button")!.focus())
-    expect(await walk(12)).toEqual(["Home", "Prepare", "Live", "Library", "Design", "History", "Permissions", "Connections", "Team", "Collapse sidebar", "Your desk: Tolu, Main computer", "After"])
+    expect(await walk(13)).toEqual(["Home", "Prepare", "Live", "Library", "Design", "History", "Permissions", "Connections", "Team", "Settings",
+      "Collapse sidebar", "Your desk: Tolu, Main computer", "After"])
     // And back the same way.
     await tab(true)
     expect(focused()).toBe("Your desk: Tolu, Main computer")
@@ -118,7 +119,7 @@ describe("keyboard order (#215)", () => {
     await mount(<SettingsPage />)
     const search = host.querySelector<HTMLInputElement>('input[aria-label="Search settings"]')!
     await act(async () => search.focus())
-    expect(await walk(12)).toEqual(["Church and profile", "Bible", "Audio", "Speech Recognition", "Remote Control", "Outputs", "AI assistants", "Data & Sync", "Appearance", "Heard verses", "Diagnostics", "Help"])
+    expect(await walk(12)).toEqual(["Church and profile", "Bible", "Audio", "Speech Recognition", "Network & remote access", "Outputs", "AI assistants", "Data & Sync", "Appearance", "Heard verses", "Diagnostics", "Help"])
     // Then into the section that is open, not round again.
     await tab()
     expect(host.querySelector("section")!.contains(document.activeElement)).toBe(true)

@@ -93,7 +93,7 @@ describe("Settings page search", () => {
   })
 
   it("lists every section under the owner's seven headings, in order, until something is typed (#447)", () => {
-    expect(sections()).toEqual(["Church and profile", "Bible", "Audio", "Speech Recognition", "Remote Control", "Outputs", "AI assistants", "Data & Sync", "Appearance", "Heard verses", "Diagnostics", "Help"])
+    expect(sections()).toEqual(["Church and profile", "Bible", "Audio", "Speech Recognition", "Network & remote access", "Outputs", "AI assistants", "Data & Sync", "Appearance", "Heard verses", "Diagnostics", "Help"])
     const headings = [...host.querySelectorAll('nav[aria-label="Settings sections"] > div > p')].map((p) => p.textContent)
     expect(headings).toEqual(["Church and profile", "Audio and speech", "Connections", "AI and MCP", "Data and sync", "Preferences", "Diagnostics and about"])
   })
