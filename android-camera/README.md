@@ -1,13 +1,13 @@
 # Rhema Studio Cam (Android)
 
-(Called Rhema Camera before 1.1. The package `com.openbezal.rhema.camera` and the `rhema-camera://` link are unchanged, so an installed copy updates in place.)
+(Called Rhema Camera before 1.1. From 1.7.0.0 the package is `com.airixmedia.rhema.camera` (developer: Airix Media — Hendrix Nwaokolo); a phone with an earlier `com.openbezal.rhema.camera` build installs it beside the old one, pairs once, then uninstalls the old one. The `rhema-camera://` link is unchanged.)
 
 A phone camera app for Rhema Studio (#209). The screen shows the camera's picture and nothing else;
 everything else is in Settings. It sends to the camera router that comes with Rhema (MediaMTX),
 encrypted, on the church network only. Rhema's scenes and TVs and OBS take it from there as they take
 any camera.
 
-Version 1.6.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) and newer · target API 34.
+Version 1.7.0.0 · package `com.airixmedia.rhema.camera` · Android 8 (API 26) and newer · target API 34.
 
 ## Using it
 
@@ -193,7 +193,7 @@ plan, kelvin white balance, every look's colour maths (tone curve rising, mid-gr
 hue kept, black and white, the baked table matching the maths), `.cube` tables and the film
 shutter's meter. A failure stops the build. `build/` is git-ignored: never commit the APK.
 
-For checking from a computer: `adb shell am start -n com.openbezal.rhema.camera/.MainActivity --es look
+For checking from a computer: `adb shell am start -n com.airixmedia.rhema.camera/.MainActivity --es look
 cinematic --es ae film --es preset smooth30` picks a look, exposure mode or preset.
 
 ## Tested on
