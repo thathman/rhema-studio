@@ -276,6 +276,7 @@ const REVIEW_LAYER_FIELDS = [
   ["language", "Language"], ["cameraUrl", "Camera source"], ["cameraFallback", "Camera fallback"], ["noSignal", "No-signal behavior"],
   ["noSignalName", "Show no-signal name"], ["clockShows", "Clock display"], ["countdownTo", "Countdown event"],
   ["until", "Countdown target"], ["themeId", "Theme"], ["fadeMs", "Transition"], ["textWiden", "Long-word layout"],
+  ["textGradient", "Text gradient"], ["textOutline", "Text outline"], ["outline", "Outline"], ["corner", "Corners"], ["shadow", "Shadow"], ["blur", "Blur"],
 ] as const
 
 function reviewedValue(key: string, value: unknown, cameraLabelForUrl?: CameraLabel): string {

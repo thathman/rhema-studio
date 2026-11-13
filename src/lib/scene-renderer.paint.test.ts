@@ -184,6 +184,13 @@ describe("scene paint on a real canvas", () => {
       if (near(p, WHITE, 10)) white++
     }
     expect([rose > 50, blue > 50, white > 50]).toEqual([true, true, true])
+    // A joined desk's save keeps them (it neither sees nor sets them), unless it changed the words' colour.
+    const { mergeDeskScene, sceneForDesk } = await import("@/lib/desk-scenes")
+    const sent = JSON.parse(JSON.stringify(sceneForDesk(back.scene, false)))
+    const moved = mergeDeskScene({ ...sent, layers: sent.layers.map((l: SceneLayer) => ({ ...l, box: { ...l.box, x: 25 } })) }, back.scene, { cameras: new Set(), themes: new Set() })!
+    expect(moved.layers[0]).toMatchObject({ box: { x: 25 }, textGradient: back.scene.layers[0]!.textGradient, textOutline: { color: "#ffffff", width: 6 } })
+    const recoloured = mergeDeskScene({ ...sent, layers: sent.layers.map((l: SceneLayer) => ({ ...l, textColor: "#00ff00" })) }, back.scene, { cameras: new Set(), themes: new Set() })!
+    expect(recoloured.layers[0]!.textGradient).toBeUndefined()
     // A stored scene drops a text gradient or outline it cannot draw.
     const stored = normalizeScene({ ...words, layers: [layer("bad", "text", { text: "x", textGradient: { angle: 0, stops: [] } as never, textOutline: { color: "red", width: 3 } as never })] })!
     expect([stored.layers[0]!.textGradient, stored.layers[0]!.textOutline]).toEqual([undefined, undefined])
