@@ -12,6 +12,7 @@ import { useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useSlideStore } from "@/stores/slide-store"
+import { copyAtSourceRevision } from "@/studio/library/slide-items"
 import { useShellStore } from "@/studio/shell-store"
 
 import { CUE_TRIGGERS, GO_LIVE_CUES, ITEM_CUE_DOES, isAudioItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type AudioQueueItem, type CueQueueItem, type CueTrigger, type GoLiveCue, type ImageQueueItem, type ItemCue, type ItemCueDo, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
@@ -375,6 +376,23 @@ export function NoteEditor({ item }: { item: QueueItem }) {
 
 /** Prepare-only: edit a custom slide in place. The preview follows every keystroke. */
 
+/** A service copy whose reusable source has a newer saved version (#395): say so, and offer to update this copy only. */
+function SourceUpdate({ item }: { item: SlideQueueItem }) {
+  const id = item.slide.source_asset_id
+  const source = useSlideStore((s) => s.slides.find((slide) => slide.id === id))
+  const loaded = useSlideStore((s) => s.slides.length > 0 || s.loading)
+  useEffect(() => { if (id && !loaded) void useSlideStore.getState().list("").catch(() => {}) }, [id, loaded])
+  if (!source || source.revision <= (item.slide.source_revision ?? 0)) return null
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5" role="status">
+      <p className="text-[0.6875rem]">The reusable source was changed since this copy was made (version {source.revision}; this copy is {item.slide.source_revision ?? "older"}).</p>
+      <Button size="xs" variant="outline" onClick={() =>
+        useQueueStore.getState().updateItem(item.id, (i) => (isSlideItem(i) ? copyAtSourceRevision(i, source, useMediaStore.getState().assets) : i))
+      }>Update this copy</Button>
+    </div>
+  )
+}
+
 export function CustomSlideEditor({ item }: { item: SlideQueueItem }) {
   const update = (patch: Partial<SlideQueueItem["slide"]>) =>
     useQueueStore.getState().updateItem(item.id, (i) => {
@@ -391,6 +409,7 @@ export function CustomSlideEditor({ item }: { item: SlideQueueItem }) {
           useShellStore.getState().openLibrarySection("slides", prepareLibraryReturnForMoment(item.id))
         }}>Edit reusable source</Button>
       </div>}
+      {item.slide.source_asset_id && <SourceUpdate item={item} />}
       <Input aria-label="Slide title" maxLength={200} value={item.slide.title} placeholder="Title" className="h-8 text-sm" onChange={(e) => update({ title: e.target.value })} />
       <Textarea
         aria-label="Slide text"
