@@ -343,7 +343,7 @@ async function runScenario() {
     await activateButton(currentSlideRow.querySelector('button[title^="Click to open it in the editor"]'))
     await setNativeSelect(`select[aria-label="Scene for ${currentSlide.reference}"]`, qaScene.id)
     await setNativeSelect(`select[aria-label="Camera for ${currentSlide.reference}"]`, "qa-synthetic-camera")
-    await clickTab("Signals")
+    await clickTab("Cues")
     const takeSection = await waitFor(
       () => [...document.querySelectorAll("section")].find((section) => normal(section.querySelector("h3")?.innerText) === "When you Take it"),
       "scene Take intent controls",
@@ -393,7 +393,7 @@ async function runScenario() {
     await clickTab("Timing")
     await setInput('[aria-label="Planned time for Start prayer timer"]', "6")
     document.querySelector('[aria-label="Planned time for Start prayer timer"]')?.blur()
-    await clickTab("Signals")
+    await clickTab("Cues")
     await setNativeSelect('select[aria-label="Cue when Start prayer timer goes live"]', "timer.fresh")
     await waitFor(() => {
       const item = qa.queue.getState().items.find((candidate) => candidate.id === timerCue.id)

@@ -405,7 +405,7 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBibleStore.getState().selectedQueueItemId).toBeNull()
     expect(useBibleStore.getState().selectedSlide).toBeNull()
     expect(el.querySelector('button[aria-label="Event plan"]')).toBeNull()
-    expect(el.textContent).toContain("Confidence")
+    expect(el.textContent).toContain("Stage screen")
     await vi.waitFor(
       () => expect(document.activeElement).toBe(document.querySelector(`[data-rundown-item-id="${inserted.id}"]`)),
       { timeout: 1000 },

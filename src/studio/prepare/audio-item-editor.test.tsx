@@ -64,7 +64,7 @@ describe("audio cue editor", () => {
     expect(document.querySelector('[aria-label="Audio fade out seconds"]')).toHaveProperty("value", "1.5")
     expect(document.body.textContent).not.toContain("LOOK_AND_SCENE_CONTROLS")
 
-    const signalsTab = Array.from(document.querySelectorAll('[role="tab"]')).find((tab) => tab.textContent === "Signals")
+    const signalsTab = Array.from(document.querySelectorAll('[role="tab"]')).find((tab) => tab.textContent === "Cues")
     expect(signalsTab).toBeTruthy()
     await act(async () => (signalsTab as HTMLElement).click())
     expect(document.body.textContent).not.toContain("TAKE_STEPS_CONTROLS")

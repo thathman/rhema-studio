@@ -61,7 +61,7 @@ export function ItemEditor() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-border px-5 pt-4 pb-3">
-        <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Event editor · {index + 1}</p>
+        <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Item {index + 1}</p>
         <div className="mt-1 flex items-center gap-2">
           <h2 className="truncate text-lg font-bold tracking-[-0.03em]">{item.reference}</h2>
           <Badge variant="accent" className="gap-1">{KIND[kind][1]}{badgeLabel}</Badge>
@@ -77,9 +77,9 @@ export function ItemEditor() {
         <div className="px-5 pt-3">
           <TabsList>
             <TabsTrigger value="content">Slides</TabsTrigger>
-            <TabsTrigger value="stage">Confidence</TabsTrigger>
+            <TabsTrigger value="stage">Stage screen</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
-            <TabsTrigger value="signals">Signals</TabsTrigger>
+            <TabsTrigger value="signals">Cues</TabsTrigger>
             <TabsTrigger value="timing">Timing</TabsTrigger>
           </TabsList>
         </div>
@@ -113,7 +113,7 @@ export function ItemEditor() {
           <p className="mt-2 text-xs text-muted-foreground">What the stage screen shows for this item: its words, note and what comes next. The timer and private message appear when this item is live.</p>
         </TabsContent>
         <TabsContent value="signals" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
-          <p className="px-2 pt-3 text-xs text-muted-foreground">Signals belong to this item, not the whole service. They never take anything live by themselves.</p>
+          <p className="px-2 pt-3 text-xs text-muted-foreground">Cues belong to this item, not the whole service. They never take anything live by themselves.</p>
           <GoLiveCues item={item} />
           <ItemCuesEditor item={item} />
           {!isCueItem(item) && !isAudioItem(item) && <TakeSteps item={item} />}
