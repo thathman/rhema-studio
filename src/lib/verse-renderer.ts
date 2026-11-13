@@ -111,6 +111,8 @@ export interface VerseLayoutMetrics {
   verseRect: VerseLayoutRect | null
   /** Auto-fitted verse font size (scaled px). Absent when there is no verse. */
   fittedVerseFontSize?: number
+  /** Even at the smallest size the words are taller than their box: the screen cuts some off (#217). */
+  clipped?: boolean
   /** Free-mode element boxes in canvas px. Only set when layout.mode === "free". */
   referenceBoxRect?: VerseLayoutRect | null
   verseBoxRect?: VerseLayoutRect | null
@@ -1407,6 +1409,7 @@ export function computeVerseLayoutMetrics(
       verseFitRect.width,
       fittedVerseFontSize
     )
+    const freeClipped = verseMetrics.height > verseFitRect.height + 0.5
     const verseY = alignY(
       resolveVerticalAlign(scaledTheme.verseText.verticalAlign),
       verseFitRect.y,
@@ -1455,6 +1458,7 @@ export function computeVerseLayoutMetrics(
       referenceRect,
       verseRect,
       fittedVerseFontSize,
+      clipped: !!verse && freeClipped,
       referenceBoxRect,
       verseBoxRect,
       // In free mode each element owns a box, so its plate fills that box.
@@ -1482,12 +1486,13 @@ export function computeVerseLayoutMetrics(
     0,
     scaledTheme.layout.referenceGap ?? scaledTheme.reference.fontSize * 0.5
   )
+  const availableVerseHeight = calculateMaxAvailableVerseHeight(scaledTheme, textRect, referenceHeight)
   const fittedVerseFontSize = calculateScaledFontSize(
     ctx,
     scaledTheme,
     verse,
     textRectW,
-    calculateMaxAvailableVerseHeight(scaledTheme, textRect, referenceHeight)
+    availableVerseHeight
   )
   const verseMetrics = measureVerseHeight(
     ctx,
@@ -1496,6 +1501,7 @@ export function computeVerseLayoutMetrics(
     textRectW,
     fittedVerseFontSize
   )
+  const clipped = verseMetrics.height > availableVerseHeight + 0.5
   const verseHeight = verseMetrics.height
   const verseDrawX = alignX(
     verseAlign === "justify" ? "left" : verseAlign,
@@ -1592,6 +1598,7 @@ export function computeVerseLayoutMetrics(
     referenceRect,
     verseRect,
     fittedVerseFontSize,
+    clipped: !!verse && clipped,
     referenceBoxRect: null,
     verseBoxRect: null,
     // Stacked mode has no per-element boxes, so each plate hugs its own text.
@@ -1777,6 +1784,24 @@ function renderVerseImpl(
  * translucent, a lot when the words sit straight on the picture. Dark text
  * themes get no scrim (it would only hurt).
  */
+/**
+ * Would these words be cut off on a screen with this look (#217)? True when, even at the smallest
+ * size the look allows, they are taller than their box. Measured, not drawn: safe off screen.
+ */
+export function textClipped(theme: BroadcastTheme, verse: VerseRenderData, ctx: CanvasRenderingContext2D | null = measuringContext()): boolean {
+  if (!ctx) return false
+  return computeVerseLayoutMetrics(ctx, theme, verse).clipped === true
+}
+
+let measuring: CanvasRenderingContext2D | null | undefined
+function measuringContext(): CanvasRenderingContext2D | null {
+  if (measuring === undefined) {
+    const canvas = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(1, 1) : typeof document !== "undefined" ? document.createElement("canvas") : null
+    measuring = (canvas?.getContext("2d") as CanvasRenderingContext2D | null | undefined) ?? null
+  }
+  return measuring
+}
+
 export function backgroundScrimAlpha(theme: BroadcastTheme): number {
   if (!isLightColor(theme.verseText.color)) return 0
   const box = theme.textBox

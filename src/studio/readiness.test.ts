@@ -134,6 +134,14 @@ describe("computeReadiness", () => {
     expect(computeReadiness(base).checks.some((x) => x.id === "content")).toBe(false)
   })
 
+  it("warns about words a congregation screen would cut off, naming them (#217)", () => {
+    const r = computeReadiness({ ...good, clippedText: [{ what: "Psalm 119:1", output: "Main Display" }] })
+    const c = r.checks.find((x) => x.id === "clipped-text")!
+    expect(c).toMatchObject({ status: "warn", label: "1 slide is too long for the screen", fix: "prepare" })
+    expect(c.detail).toContain("Psalm 119:1 will be cut off on Main Display")
+    expect(computeReadiness(good).checks.some((x) => x.id === "clipped-text")).toBe(false)
+  })
+
   it("is not ready while verses are saved for a translation this computer lacks, or items are from a newer version", () => {
     const missing = computeReadiness({ ...good, missingTranslations: ["NIV"] })
     expect(missing.ready).toBe(false)
