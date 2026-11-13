@@ -117,7 +117,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }))
 
-import { act } from "react"
+import { act, StrictMode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -129,6 +129,7 @@ import { SongLibrary } from "@/studio/library/song-library"
 import { AddItems } from "@/studio/prepare/add-items"
 import { ItemEditor } from "@/studio/prepare/item-editor"
 import { useShellStore } from "@/studio/shell-store"
+import { useSongStore } from "@/stores/song-store"
 
 const slide = (id: string): QueueItem => ({
   id,
@@ -186,6 +187,16 @@ describe("SongLibrary takes words from Find anything (#407)", () => {
     expect(input.value).toBe("amazing")
     await act(async () => useShellStore.setState({ libraryFind: { section: "songs", query: "grace" } }))
     expect(input.value).toBe("grace")
+  })
+
+  it("searches the handed words last, even after a StrictMode remount", async () => {
+    const searches: string[] = []
+    const real = useSongStore.getState().search
+    useSongStore.setState({ search: (q: string, ...rest: unknown[]) => { searches.push(q); return (real as (...a: unknown[]) => Promise<never[]>)(q, ...rest) } } as never)
+    useShellStore.setState({ workspace: "library", libraryFind: { section: "songs", query: "amazing" } })
+    await act(async () => root!.render(<StrictMode><SongLibrary privatePreview onUseItem={() => {}} /></StrictMode>))
+    expect(searches.at(-1)).toBe("amazing")
+    useSongStore.setState({ search: real })
   })
 
   it("a song list elsewhere (a desk, Prepare's Add) never takes them", async () => {

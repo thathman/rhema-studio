@@ -45,12 +45,12 @@ export function BibleLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
   const savedPassages = useBibleStore((s) => s.savedPassages)
   const [query, setQuery] = useState("")
   const queryRef = useRef("")
-  const findRef = useRef<() => Promise<void>>(async () => {})
   const [savedFilter, setSavedFilter] = useState("")
   const [found, setFound] = useState<import("@/types").Verse | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  useLibraryFind("bible", (q) => { queryRef.current = q; setQuery(q); setFound(null); setMessage(null); void findRef.current() }, Boolean(onUseItem))
+  // ponytail: fills the reference box; Find (or Enter) looks it up, after this edition's books have loaded.
+  useLibraryFind("bible", (q) => { queryRef.current = q; setQuery(q); setFound(null); setMessage(null) }, Boolean(onUseItem))
   const [savedEditionBooks, setSavedEditionBooks] = useState<
     Record<number, Book[] | null>
   >({})
@@ -212,7 +212,6 @@ export function BibleLibrary({ onUseItem }: { onUseItem?: LibraryItemUseHandler 
       setBusy(false)
     }
   }
-  useEffect(() => { findRef.current = find })
 
   const save = async () => {
     if (!found) return

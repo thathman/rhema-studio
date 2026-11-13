@@ -52,8 +52,10 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
       if (near.length > 0 && useSongStore.getState().query === q) useSongStore.setState({ results: near })
     })
   }, [])
+  // The words searched last, so a remount (StrictMode) searches them again rather than everything.
+  const searched = useRef("")
   useEffect(() => {
-    search("")
+    search(searched.current)
     return () => { if (timer.current) clearTimeout(timer.current) }
   }, [search])
   // The Library's "New song": open the editor (a render-time check, so no effect sets state).
@@ -70,7 +72,7 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
     timer.current = setTimeout(() => search(value), 180)
   }
   // Searched at once: a timer cleared by a quick remount would leave the words unsearched.
-  useLibraryFind("songs", (q) => { setQuery(q); search(q) }, Boolean(onUseItem))
+  useLibraryFind("songs", (q) => { setQuery(q); searched.current = q; search(q) }, Boolean(onUseItem))
 
   const add = (song: SongSummary) => {
     const item: QueueItem = songQueueItem(song)
