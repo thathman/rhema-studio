@@ -242,7 +242,7 @@ export function PermissionsWorkspace() {
                 </li>)}
               </ul>
             )}
-            <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">Roles limit each paired device. Pausing leaves its view and team notices available. Revoking removes its saved key. Listener ports, network binding and authentication keys remain in Settings → Remote Control.</p>
+            <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">Roles limit what each paired device can do. Pause stops its commands but keeps its view and team notices; Revoke removes it until it pairs again. Network ports and keys are in Settings → Network & remote access.</p>
             <details className="mt-3 text-xs">
               <summary className="cursor-pointer text-muted-foreground">What each role can do</summary>
               <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">

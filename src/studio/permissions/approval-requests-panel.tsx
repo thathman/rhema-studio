@@ -45,7 +45,7 @@ function requestDescription(request: ApprovalRequest, scenes: ReturnType<typeof 
   if (request.kind === "stage_send") return `Private Stage message to ${request.targetId}`
   if (request.kind === "plan_approve") {
     const title = typeof payload?.title === "string" && payload.title.trim() ? payload.title.trim() : request.targetId
-    return `Approve service “${title}”${request.baseRevision === null ? " · revision missing" : ` · revision ${request.baseRevision}`}`
+    return `Approve service “${title}”${request.baseRevision === null ? " · version unknown" : ` · version ${request.baseRevision}`}`
   }
   const sceneName = typeof scene?.name === "string" && scene.name.trim()
     ? scene.name.trim()
@@ -64,22 +64,22 @@ function requestImpact(
     return `Private Stage display · ${request.targetId} · Message: “${text}”. It is not sent until the main computer applies this approval; receiver playback is not confirmed.`
   }
   if (request.kind === "plan_approve") {
-    if (request.baseRevision === null) return "This request has no base revision checked by the main computer and cannot be confirmed safely."
-    return `Submitted revision ${request.baseRevision}. Approve this exact revision in Prepare first; the main computer verifies it before confirmation.`
+    if (request.baseRevision === null) return "This request does not say which version it was made from, so it cannot be confirmed safely."
+    return `Sent for version ${request.baseRevision}. Approve that version in Prepare first; this computer checks it again before confirming.`
   }
   return `Target: ${request.targetId}`
 }
 
 function sceneDeleteInstruction(request: ApprovalRequest): string {
   switch (request.state) {
-    case "submitted": return "If approved, the scene will be removed only after an explicit Apply on the main computer."
-    case "approved": return "The scene will be removed only after an explicit Apply on the main computer."
+    case "submitted": return "If approved, the scene is removed only when someone presses Apply on the main computer."
+    case "approved": return "The scene is removed only when someone presses Apply on the main computer."
     case "applied": return "The main computer applied this deletion. The scene was removed from its library; Program remains unchanged."
     case "declined": return "The main computer declined this deletion. The scene remains in the library."
     case "requested_changes": return "The main computer's requested changes. The scene remains in the library until a fresh request is reviewed."
     case "expired": return "This deletion request expired. The scene remains in the library."
     case "withdrawn": return "This deletion request was withdrawn. The scene remains in the library."
-    case "superseded": return "This deletion request is stale. The scene remains in the library; submit a fresh request after reviewing its current revision."
+    case "superseded": return "This request is out of date: the scene has changed since. It stays in the library; look at it and ask again if needed."
   }
   return "This request did not remove the scene from the library."
 }
@@ -143,7 +143,7 @@ function SceneRequestReview({
         <h4 className="text-sm font-medium">Scene change review</h4>
         <Badge variant="neutral">{model.baseRevisionLabel}</Badge>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">Current scene data is local review context. The main computer checks the submitted revision again before Apply. This review does not change Preview or Program.</p>
+      <p className="mt-1 text-xs text-muted-foreground">This shows the scene as it is now on this computer. Apply checks it again first. Looking here changes nothing in Preview or Program.</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="min-w-0 rounded-md border border-border bg-background p-3">
           <h5 className="text-xs font-semibold">{model.beforeLabel}</h5>
@@ -341,7 +341,7 @@ export function ApprovalRequestsPanel({ local }: { local?: { open: number; conte
         <ShieldCheckIcon aria-hidden className="size-4 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <h2 id="host-approval-requests-title" className="font-semibold">Approval Requests</h2>
-          <p className="text-xs text-muted-foreground">Durable requests recorded by this computer. Approved scenes need an explicit Apply and never Take to Program. An approved Stage cue needs an explicit Apply on the main computer before it reaches its private display. Service revisions use Prepare.</p>
+          <p className="text-xs text-muted-foreground">Changes other desks have asked for, kept on this computer. Approving never puts anything on a screen: an approved scene or stage cue still needs Apply here, and a scene still needs its own Take. Service approvals are done in Prepare.</p>
         </div>
         <Badge variant={pending.length + (local?.open ?? 0) ? "amber" : "neutral"}>{pending.length + (local?.open ?? 0)} pending</Badge>
         <Button size="sm" variant="outline" aria-label="Refresh approval requests" disabled={!isHost || loading} onClick={reload}><RefreshCwIcon /> Refresh</Button>
@@ -366,10 +366,10 @@ export function ApprovalRequestsPanel({ local }: { local?: { open: number; conte
                       <h3 className="font-semibold">{requestDescription(request, scenes)}</h3>
                       <Badge variant={stateVariant(request.state)}>{stateLabel(request)}</Badge>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">From {request.requester.name} · {dateWords(request.createdAt)} · {request.baseRevision === null ? "No base revision" : `Based on main computer revision ${request.baseRevision}`} · Expires {dateWords(request.expiresAt)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">From {request.requester.name} · {dateWords(request.createdAt)} · {request.baseRevision === null ? "Version unknown" : `Made from version ${request.baseRevision}`} · Expires {dateWords(request.expiresAt)}</p>
                     {!sceneReview && <p className="mt-1 text-xs text-muted-foreground">{requestImpact(request)}</p>}
                     {sceneReview && <SceneRequestReview request={request} model={sceneReview} assignedOutputs={assignedOutputs} rehearsal={rehearsal} planReferences={planReferences} cameraLabelForUrl={cameraLabelForUrl} />}
-                    {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene revision and current output assignment on this computer. Saving changes the scene library only; it does not Take the scene live.</p>}
+                    {request.state === "approved" && request.kind.startsWith("scene_") && <p className="mt-1 text-xs text-muted-foreground">Apply checks the scene and which outputs use it, then saves it to the scene library. It does not put the scene on a screen.</p>}
                     {request.state === "approved" && request.kind.startsWith("scene_") && localHostStatusUnknown[request.id] && <p role="alert" className="mt-1 text-xs text-amber-800">The main computer's response was interrupted and its status is unknown. The local recovery record was kept. Refresh main computer status before trying again.</p>}
                     {request.state === "approved" && request.kind === "scene_delete" && sceneIdsOnScreens.has(request.targetId) && <p role="status" className="mt-1 text-xs text-amber-800">Move every real screen away from this scene before applying its deletion.</p>}
                     {request.state === "applied" && request.kind.startsWith("scene_") && needsLocalRecovery && !localRecoveryUnavailable[request.id] && <p role="status" className="mt-1 text-xs text-amber-800">The main computer recorded this approval, but local scene recovery is still needed. Program has not changed. Retry applies only this approved version and stops if the local scene changed since approval.</p>}
@@ -403,7 +403,7 @@ export function ApprovalRequestsPanel({ local }: { local?: { open: number; conte
                     <Button size="sm" variant="ghost" disabled={busy === request.id} onClick={() => setRequestingChanges(request.id)}>Request changes</Button>
                   </div>}
                   {isHost && request.kind === "plan_approve" && request.state === "approved" && request.baseRevision !== null && <div className="flex flex-wrap items-center gap-2">
-                    <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void confirmPlan(request)}>Confirm approved revision</Button>
+                    <Button size="sm" variant="outline" disabled={busy === request.id} onClick={() => void confirmPlan(request)}>Confirm approved version</Button>
                   </div>}
                   {isHost && request.kind === "stage_send" && request.state === "approved" && <div className="flex flex-wrap items-center gap-2">
                     <Button size="sm" variant="outline" aria-label="Apply approved private Stage message" disabled={busy !== null} onClick={() => void applyStageSend(request)}>Send approved Stage message</Button>

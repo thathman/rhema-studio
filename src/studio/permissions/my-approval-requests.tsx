@@ -95,7 +95,7 @@ export function MyApprovalRequests() {
                   <h3 className="font-semibold">{KIND_WORDS[request.kind] ?? request.kind.replaceAll("_", " ")} · {request.targetId}</h3>
                   <Badge variant={request.state === "submitted" ? "amber" : request.state === "approved" || request.state === "applied" ? "green" : request.state === "declined" || request.state === "superseded" ? "rose" : "neutral"}>{STATE_WORDS[request.state]}</Badge>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Sent {dateWords(request.createdAt)}{request.baseRevision !== null ? ` · revision ${request.baseRevision}` : ""}{request.decidedBy ? ` · decided by ${request.decidedBy}` : ""}{request.decidedAt ? ` · ${dateWords(request.decidedAt)}` : ""}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Sent {dateWords(request.createdAt)}{request.baseRevision !== null ? ` · version ${request.baseRevision}` : ""}{request.decidedBy ? ` · decided by ${request.decidedBy}` : ""}{request.decidedAt ? ` · ${dateWords(request.decidedAt)}` : ""}</p>
                 {request.reason && <p className="mt-1 text-sm">{request.reason}</p>}
                 {request.decisionNote && <p className="mt-1 text-sm text-muted-foreground">Main computer note: {request.decisionNote}</p>}
                 {rowErrors[request.id] && <p role="alert" className="mt-2 text-xs text-destructive">{rowErrors[request.id]}</p>}
