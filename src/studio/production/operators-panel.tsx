@@ -63,9 +63,9 @@ const QUEUE_ROLES = new Set(["present", "configure", "editor"])
  * Queue a verse or a song asked for on the host (Comms C2, #251): into its run of show for later,
  * nothing shown. Null when the host took it, else its reason.
  */
-async function queueOnHost(a: NoticeAction): Promise<string | null> {
+async function queueOnHost(a: NoticeAction, event: string | null = null): Promise<string | null> {
   if (a.kind !== "bible" && a.kind !== "song") return "only a verse or a song can be queued"
-  const r = await useJoin.getState().send({ command: "queue_request", value: { kind: a.kind, value: a.value } })
+  const r = await useJoin.getState().send({ command: "queue_request", value: { kind: a.kind, value: a.value, ...(event ? { event } : {}) } })
   return r.ok ? null : r.error
 }
 
@@ -365,7 +365,8 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
         const refused = results.find((r) => !r.ok)
         return refused && !refused.ok ? refused.error : null
       }}
-      onQueue={QUEUE_ROLES.has(role) ? (a) => queueOnHost(a) : undefined}
+      onQueue={QUEUE_ROLES.has(role) ? (a, event) => queueOnHost(a, event) : undefined}
+        events={(live.event.targets ?? []).filter((t) => t.kind === "event").map((t) => ({ id: t.id, title: t.reference }))}
       scenes={viewer ? [] : live.scenes}
       rundown={live.rundown}
       people={live.crew ?? []}

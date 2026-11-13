@@ -225,7 +225,7 @@ export function useRemoteControl() {
       await withPayload(REMOTE_EVENTS.queue_request, (p) => {
         if ((p.kind !== "bible" && p.kind !== "song") || typeof p.value !== "string") return
         const value = p.value.slice(0, 120)
-        void queueRequest({ kind: p.kind, value }).then((why) => {
+        void queueRequest({ kind: p.kind, value }, typeof p.event === "string" ? p.event : null).then((why) => {
           if (why) toast.warning(`${value} not queued`, { description: `${byOf(p)}${why}` })
           else useJournalStore.getState().add({ kind: "remote", label: `${byOf(p)}queued ${value}` })
         })
