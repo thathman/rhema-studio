@@ -226,12 +226,11 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
     ctx.rect(x0 - room, r.y - room, w + 2 * room, r.h + 2 * room)
     ctx.clip()
   }
-  ctx.fillStyle = color
-  ctx.textAlign = align
-  ctx.textBaseline = "top"
   // As the editor paints words (#448): a gradient over the text box, an outline behind each line.
   const paint = layer.textGradient ? scenePaint(ctx, color, layer.textGradient, r) : color
   ctx.fillStyle = paint
+  ctx.textAlign = align
+  ctx.textBaseline = "top"
   const outline = layer.textOutline
   let y = r.y
   for (const line of lines) {
