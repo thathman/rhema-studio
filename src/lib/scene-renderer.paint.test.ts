@@ -85,6 +85,30 @@ describe("scene paint on a real canvas", () => {
     expect(near(pixel(output, 1920 * 0.2, 1080 * 0.4), mix(NAVY, BLUE, 0.5))).toBe(true)
   })
 
+  it("a turned group draws where the editor draws it (#448)", async () => {
+    const two: Scene = { ...painted, id: "two", backgroundGradient: undefined, layers: [
+      layer("left", "color", { color: "#3157a4", box: { x: 10, y: 20, w: 25, h: 30 } }),
+      layer("right", "ellipse", { color: "#d14c62", box: { x: 50, y: 40, w: 30, h: 35 } }),
+    ] }
+    const design = sceneToDesign(two)
+    const root = design.scene.nodes[design.scene.root]!
+    const grouped = { ...design.scene, nodes: { ...design.scene.nodes,
+      g: { id: "g", type: "group", parentId: root.id, visible: true, opacity: 1, rotation: 0, children: ["left", "right"] },
+      left: { ...design.scene.nodes.left, parentId: "g" }, right: { ...design.scene.nodes.right, parentId: "g" },
+      [root.id]: { ...root, children: ["g"] } } } as never
+    const turned = applyCommand(grouped, { type: "ROTATE_NODE", id: "g", rotation: 25 })
+    const editor = createCanvas(1920, 1080)
+    await canvas2DRendererBackend.render(ctxOf(editor), buildRenderCommands(turned))
+    const saved = designToScene({ ...design, scene: turned })
+    expect(saved.issues).toEqual([])
+    const output = drawOutput(saved.scene, 1920, 1080)
+    const a = ctxOf(editor).getImageData(0, 0, 1920, 1080).data
+    const b = ctxOf(output).getImageData(0, 0, 1920, 1080).data
+    let differ = 0
+    for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
+    expect(differ / (1920 * 1080)).toBeLessThan(0.002)
+  })
+
   it("puts each gradient's colours where the angle says, at 1920×1080 and 1280×720", () => {
     for (const [w, h] of [[1920, 1080], [1280, 720]] as const) {
       const c = drawOutput(painted, w, h)
