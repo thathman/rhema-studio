@@ -207,6 +207,7 @@ export function useReadiness() {
       receivers: outputStatus[o.id]?.ndiReceivers ?? null,
     })),
     rundownCount: items.length,
+    serviceOpen: !!current,
     listening,
     micLost,
     unknownLicenceSongs,

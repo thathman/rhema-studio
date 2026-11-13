@@ -38,6 +38,8 @@ export interface ReadinessInput {
   /** Per-output state, for the detail line. */
   outputs?: OutputHealth[]
   rundownCount: number
+  /** Whether a saved service is open; false says "No service open" instead of an empty service (UX audit slice 9). */
+  serviceOpen?: boolean
   listening: boolean
   /** Listening, but its microphone or sound input has gone (unplugged, the device lost). */
   micLost?: boolean
@@ -229,7 +231,9 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
         : { id: "outputs", status: "warn", label: "No output is on a screen yet", detail: i.outputs?.length ? outputDetail(i.outputs) : "The congregation cannot see anything until an output is on air.", fix: "outputs", fixLabel: "Open outputs" },
     i.rundownCount > 0
       ? { id: "rundown", status: "ok", label: `${i.rundownCount} item${i.rundownCount === 1 ? "" : "s"} in the service` }
-      : { id: "rundown", status: "info", label: "Nothing in the service yet", detail: "You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" },
+      : i.serviceOpen === false
+        ? { id: "rundown", status: "info", label: "No service open", detail: "Open or start a service in Prepare. You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" }
+        : { id: "rundown", status: "info", label: "Nothing in the service yet", detail: "You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" },
     i.listening && i.micLost
       ? { id: "listening", status: "warn", label: "The microphone is disconnected", detail: "Nothing is being heard, so no verse is detected. Check its cable or choose another input in Settings; listening goes on by itself when it is back." }
       : i.listening
