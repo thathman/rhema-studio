@@ -53,6 +53,24 @@ describe("Prepare → AI drafts", () => {
     expect(invoke).not.toHaveBeenCalledWith("ai_draft_delete", expect.anything())
   })
 
+  it("adds a draft after the open service's own items as one undoable step, changing none of them (#252)", async () => {
+    drafts = [draft]
+    useSettingsStore.setState({ mcpEnabled: true })
+    const mine = { id: "x", kind: "slide", slide: { title: "Mine", body: "" }, reference: "Mine", confidence: 1, source: "manual", added_at: 0 }
+    useQueueStore.setState({ items: [mine] as never, headers: [{ id: "p0", type: "phase", name: "Pre-service", at: 0, rule: "manual" }] })
+    useQueueStore.getState().resetHistory()
+    await mount()
+    await act(async () => button("Add to this service").click())
+    const q = useQueueStore.getState()
+    expect(q.items.map((i) => i.reference)).toEqual(["Mine", "Welcome", "Missing hymn: Now Thank We All Our God"])
+    expect(q.headers.map((h) => [h.name, h.at])).toEqual([["Pre-service", 0], ["Main service", 1]])
+    expect(document.body.textContent).not.toContain("Replace them with this draft?")
+    expect(invoke).toHaveBeenCalledWith("ai_draft_mark_opened", expect.objectContaining({ id: draft.id }))
+    q.undo()
+    expect(useQueueStore.getState().items.map((i) => i.reference)).toEqual(["Mine"])
+    expect(useQueueStore.getState().headers.map((h) => h.name)).toEqual(["Pre-service"])
+  })
+
   it("lets people untick items and groups, shows how it differs from the open service, and opens only what is ticked", async () => {
     drafts = [{ ...draft, phases: [{ name: "Main service", role: "main", rule: "manual", starts_at: "10:00", items: [
       { kind: "slide", status: "found", title: "Welcome", planned_minutes: 5 },

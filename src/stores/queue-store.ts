@@ -52,6 +52,8 @@ interface QueueState {
   copyItems: (ids: string[]) => void
   /** Paste copies (new ids) after the item at `afterIndex` in its section; null: as a new item is added. Returns their ids. */
   pasteItems: (afterIndex: number | null) => string[]
+  /** Another rundown's items and sections added after this one's, as one undoable step (an AI draft added to the open service, #252). */
+  appendRundown: (items: QueueItem[], headers: OutlineHeader[]) => void
   /** Remove several items in one step. */
   removeItems: (ids: string[]) => void
   /** Hide (kept, skipped in Present) or show items again. */
@@ -363,6 +365,10 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
     clipboard = items.map((i) => JSON.parse(JSON.stringify(i)) as QueueItem)
     rawSet({ clipboardCount: clipboard.length })
   },
+  appendRundown: (items, headers) => set((state) => ({
+    items: [...state.items, ...items],
+    headers: [...state.headers, ...headers.map((h) => ({ ...h, at: h.at + state.items.length }))],
+  })),
   pasteItems: (afterIndex) => {
     if (clipboard.length === 0) return []
     const copies = clipboard.map(copyOf)
