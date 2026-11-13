@@ -139,9 +139,9 @@ async function hostSongs(q: string): Promise<{ title: string; number?: string }[
 }
 
 /** Queue a verse or a song asked for, into the host's run of show (nothing shown). Null when taken. */
-async function queueOnHost(a: NoticeAction): Promise<string | null> {
+async function queueOnHost(a: NoticeAction, event: string | null = null): Promise<string | null> {
   if (a.kind !== "bible" && a.kind !== "song") return "only a verse or a song can be queued"
-  const r = await useJoin.getState().send({ command: "queue_request", value: { kind: a.kind, value: a.value } })
+  const r = await useJoin.getState().send({ command: "queue_request", value: { kind: a.kind, value: a.value, ...(event ? { event } : {}) } })
   return r.ok ? null : r.error
 }
 
@@ -228,7 +228,8 @@ function BrowserDesk() {
           if (!r) return "this action needs the main computer"
           return r.ok ? null : r.error
         }}
-        onQueue={QUEUE_ROLES.has(role) ? (a) => queueOnHost(a) : undefined}
+        onQueue={QUEUE_ROLES.has(role) ? (a, event) => queueOnHost(a, event) : undefined}
+        events={(live.event.targets ?? []).filter((t) => t.kind === "event").map((t) => ({ id: t.id, title: t.reference }))}
         findSongs={hostSongs}
         scenes={viewer ? [] : live.scenes}
         rundown={live.rundown}

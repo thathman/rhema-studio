@@ -142,6 +142,10 @@ impl From<i32> for SectionMove {
 pub struct QueueIn {
     pub kind: QueueKind,
     pub value: String,
+    /// The plan's event to put it in (#409): an event id from the Live State's `event.targets`;
+    /// absent (or no longer in the plan): where the main desk adds an item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
 }
 
 /// Only a verse or a song can be queued; anything else does not parse.
@@ -816,7 +820,7 @@ mod tests {
             RemoteCommand::VoiceLeave,
             RemoteCommand::VoiceChannels(VoiceChannelsIn { listen: vec!["stage".into()], talk: "production".into(), levels: Default::default() }),
             RemoteCommand::AuxTimer(AuxTimerIn { id: "t".into(), action: "start".into() }),
-            RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Bible, value: "Romans 8:28".into() }),
+            RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Bible, value: "Romans 8:28".into(), event: None }),
             RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Marker, label: None }),
             RemoteCommand::ObsTransition("Fade".into()),
         ];
@@ -986,7 +990,9 @@ mod tests {
         assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"song_section","value":"bridge"}"#).is_err(), "only the chorus by name");
         // Queue a request: a verse or a song only.
         let q: RemoteCommand = serde_json::from_str(r#"{"command":"queue_request","value":{"kind":"song","value":"Amazing Grace"}}"#).unwrap();
-        assert_eq!(q, RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Song, value: "Amazing Grace".into() }));
+        assert_eq!(q, RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Song, value: "Amazing Grace".into(), event: None }));
+        let to_event: RemoteCommand = serde_json::from_str(r#"{"command":"queue_request","value":{"kind":"bible","value":"Romans 8:28","event":"sermon"}}"#).unwrap();
+        assert_eq!(to_event, RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Bible, value: "Romans 8:28".into(), event: Some("sermon".into()) }));
         assert_eq!(q.to_string(), "queue_request(song Amazing Grace)");
         for odd in [r#"{"command":"queue_request","value":{"kind":"scene","value":"s1"}}"#, r#"{"command":"queue_request","value":{"kind":"bible"}}"#, r#"{"command":"queue_request","value":"Romans 8:28"}"#] {
             assert!(serde_json::from_str::<RemoteCommand>(odd).is_err(), "{odd}");

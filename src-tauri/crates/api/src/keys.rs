@@ -823,7 +823,7 @@ mod tests {
 
     #[test]
     fn queueing_a_request_is_for_the_desks_that_add_to_the_queue() {
-        let q = RemoteCommand::QueueRequest(crate::command::QueueIn { kind: crate::command::QueueKind::Song, value: "Amazing Grace".into() });
+        let q = RemoteCommand::QueueRequest(crate::command::QueueIn { kind: crate::command::QueueKind::Song, value: "Amazing Grace".into(), event: None });
         for role in [Role::Present, Role::Configure, Role::Editor] {
             assert!(role.allows(&q), "{role:?}");
         }
