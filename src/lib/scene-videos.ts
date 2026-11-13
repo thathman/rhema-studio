@@ -65,3 +65,8 @@ export function videosPlaying(players: Map<string, HTMLVideoElement>): boolean {
 export function playerRect(area: { x: number; y: number; w: number; h: number }, box: { x: number; y: number; w: number; h: number }, scale: number): { left: number; top: number; width: number; height: number } {
   return { left: (area.x + (area.w * box.x) / 100) * scale, top: (area.y + (area.h * box.y) / 100) * scale, width: ((area.w * box.w) / 100) * scale, height: ((area.h * box.h) / 100) * scale }
 }
+
+/** Where a browser feed asks its host for a scene video's file: with the page's own feed key (`k`). */
+export function feedMediaUrl(feedId: string, file: string, feedKey: string): string {
+  return `/api/v1/feed/${encodeURIComponent(feedId)}/media/${file}?k=${encodeURIComponent(feedKey)}`
+}

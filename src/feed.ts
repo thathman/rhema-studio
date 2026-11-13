@@ -1,7 +1,7 @@
 import "./broadcast-fonts.css"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
 import { drawScene, drawTickerLayer, LayerFader, sceneArea, sceneOverlay, type SceneDrawOptions } from "@/lib/scene-renderer"
-import { playerRect, syncSceneVideos, videoReady } from "@/lib/scene-videos"
+import { feedMediaUrl, playerRect, syncSceneVideos, videoReady } from "@/lib/scene-videos"
 import { feedMotion, feedNext, tickerStrips } from "@/lib/feed-motion"
 import { noiseFrame } from "@/lib/no-signal"
 import { drawStage, stageSurface } from "@/lib/stage-canvas"
@@ -355,9 +355,9 @@ function show(next: Frame) {
   document.documentElement.dataset.overscan = String(overscanPct(next.overscan))
   lagClock.show(next.latencyClock === true && !next.off)
   // A Take or release fades when the scene says so; Black and Logo always cut.
-  const key = next.off ? "off" : next.scene?.sceneId ?? (next.verse?.screen ? "screen" : "own")
+  const look = next.off ? "off" : next.scene?.sceneId ?? (next.verse?.screen ? "screen" : "own")
   const ms = next.scene?.fadeMs ?? lastFade
-  if (lastKey !== null && key !== lastKey && ![key, lastKey].some((k) => k === "screen" || k === "off") && ms > 0 && canvas.width > 0) {
+  if (lastKey !== null && look !== lastKey && ![look, lastKey].some((k) => k === "screen" || k === "off") && ms > 0 && canvas.width > 0) {
     const from = document.createElement("canvas")
     from.width = canvas.width
     from.height = canvas.height
@@ -395,8 +395,8 @@ function show(next: Frame) {
     fade = { from, start: performance.now(), ms }
     // A hidden page gets no animation frames: still end on the new picture.
     setTimeout(() => { if (fade && performance.now() >= fade.start + fade.ms) { fade = null; redraw() } }, ms + 50)
-  } else if (key === "screen" || key === "off") fade = null
-  lastKey = key
+  } else if (look === "screen" || look === "off") fade = null
+  lastKey = look
   lastFade = next.scene?.fadeMs ?? 0
   frame = next.theme ? { ...next, theme: normalizeTheme(next.theme), scene: next.scene ? { ...next.scene, layers: next.scene.layers.map((l) => (l.theme ? { ...l, theme: normalizeTheme(l.theme) } : l)) } : undefined } : next
   stripped = tickerStrips(frame.scene, !!frame.overlay && frame.verse?.screen !== "black")
@@ -405,7 +405,7 @@ function show(next: Frame) {
   const moved = () => { placeCameras(); draw(); if (!ticking) { ticking = true; requestAnimationFrame(animate) } }
   syncCameras(cameras, frame.off ? [] : (frame.scene?.layers ?? []), whep, moved)
   // A video layer's file comes from the host, which serves it only while this feed shows it.
-  syncSceneVideos(videos, frame.off ? [] : (frame.scene?.layers ?? []), (l) => (l.mediaFile ? `/api/v1/feed/${encodeURIComponent(id)}/media/${l.mediaFile}?k=${encodeURIComponent(key)}` : undefined), moved)
+  syncSceneVideos(videos, frame.off ? [] : (frame.scene?.layers ?? []), (l) => (l.mediaFile ? feedMediaUrl(id, l.mediaFile, key) : undefined), moved)
   placeCameras()
   for (const l of frame.scene?.layers ?? []) if (l.theme) preloadThemeImages(l.theme, draw)
   // Pictures behind a scene's own tickers or lower third (a ticker may be on its strip).
