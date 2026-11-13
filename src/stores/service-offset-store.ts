@@ -23,6 +23,12 @@ interface OffsetState {
   /** Move the offset by `delta` minutes (−120 … +240 in all). */
   adjust: (delta: number, by?: string) => void
   reset: (by?: string) => void
+  /**
+   * Running late until a time (#196): the main service now starts at `at` ("HH:MM") instead of its
+   * planned `planned`: the offset becomes the minutes between them, the nearest day across midnight.
+   * False (and nothing changed) when `at` is not a time or is more than 2 hours early or 4 hours late.
+   */
+  startAt: (at: string, planned: string, by?: string) => boolean
 }
 
 const clamp = (m: number) => Math.max(-120, Math.min(240, Math.round(m)))
@@ -44,6 +50,19 @@ export const useServiceOffset = create<OffsetState>((set, get) => ({
     set({ minutes, by: by ?? null })
     useTimeChange.getState().note(`${delta > 0 ? "+" : "−"}${Math.abs(delta)} min (${words(minutes)})`, by)
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}${words(minutes)} (${delta > 0 ? "+" : "−"}${Math.abs(delta)} min)` })
+  },
+  startAt: (at, planned, by) => {
+    const m = (t: string) => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(t) ? Number(t.split(":")[0]) * 60 + Number(t.split(":")[1]) : null)
+    const a = m(at), p = m(planned)
+    if (a === null || p === null) return false
+    // The nearest day, as the engine reads a clock time: 23:30 planned, starting 00:10 is 40 late.
+    let d = a - p
+    if (d > 720) d -= 1440
+    else if (d < -720) d += 1440
+    // Beyond what the offset holds (−120 … +240): not set, rather than set to something else.
+    if (clamp(d) !== d) return false
+    if (d !== get().minutes) get().adjust(d - get().minutes, by)
+    return true
   },
   reset: (by) => {
     if (get().minutes === 0) return
