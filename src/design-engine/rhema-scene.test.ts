@@ -228,7 +228,6 @@ describe("Rhema scenes in the Avnac engine", () => {
     expect(byId.cam.visible).toBe(false)
     expect(byId.verse.visible).toBe(false)
     expect(issues).toEqual(expect.arrayContaining([
-      { nodeId: group.id, message: expect.stringContaining("A faded group whose layers overlap") },
       { nodeId: group.id, message: "Group rotation cannot be saved into a Rhema scene yet" },
     ]))
   })
@@ -297,17 +296,16 @@ describe("picture crop and clipping (#448 Slice B)", () => {
     expect(designToScene({ ...design, scene }).issues).toEqual([{ nodeId: "pic", message: expect.stringContaining(says) }])
   })
 
-  it("fades a group's layers when they do not overlap, and refuses it when they do (#448)", () => {
-    const design = sceneToDesign(sermon)
-    const root = design.scene.nodes[design.scene.root]!
-    const faded = designToScene({ ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, [root.id]: { ...root, opacity: 0.5 } } } })
-    expect(faded.issues).toContainEqual({ nodeId: root.id, message: expect.stringContaining("A faded group whose layers overlap") })
-    const apart: Scene = { ...sermon, layers: [layer("a", "color", { color: "#ff0000", box: { x: 0, y: 0, w: 40, h: 40 }, opacity: 0.8 }), layer("b", "ellipse", { color: "#00ff00", box: { x: 50, y: 50, w: 40, h: 40 } })] }
+  it("fades a group's layers by the group's opacity, overlapping or not, as the editor does (#448)", () => {
+    const apart: Scene = { ...sermon, layers: [layer("a", "color", { color: "#ff0000", box: { x: 0, y: 0, w: 60, h: 60 }, opacity: 0.8 }), layer("b", "ellipse", { color: "#00ff00", box: { x: 50, y: 50, w: 40, h: 40 } })] }
     const d2 = sceneToDesign(apart)
     const r2 = d2.scene.nodes[d2.scene.root]!
     const out = designToScene({ ...d2, scene: { ...d2.scene, nodes: { ...d2.scene.nodes, [r2.id]: { ...r2, opacity: 0.5 } } } })
     expect(out.issues).toEqual([])
     expect(out.scene.layers.map((l) => [l.id, l.opacity])).toEqual([["a", 0.4], ["b", 0.5]])
+    // Out of range is clamped as the editor clamps it.
+    const over = designToScene({ ...d2, scene: { ...d2.scene, nodes: { ...d2.scene.nodes, [r2.id]: { ...r2, opacity: 1.5 } } } })
+    expect(over.scene.layers.map((l) => l.opacity)).toEqual([0.8, 1])
   })
 })
 

@@ -183,7 +183,8 @@ function layerEntries(scene: SaraswatiScene, issues: DesignIssue[] = [], rootId 
     if (!node) return void issues.push({ nodeId: id, message: `"${id}" is listed in the design but missing from it` })
     if (node.type === "group") {
       if (!Array.isArray(node.children)) return void issues.push({ nodeId: id, message: `group "${id}" has no list of layers` })
-      node.children.forEach((child) => walk(child, visible && node.visible, groupOpacity * node.opacity))
+      // Clamped as the editor clamps a group's opacity.
+      node.children.forEach((child) => walk(child, visible && node.visible, groupOpacity * Math.max(0, Math.min(1, node.opacity))))
     } else {
       out.push({ node, visible: visible && node.visible, groupOpacity })
     }
@@ -294,12 +295,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
     issues.push({ nodeId: "__artboard__", message: "This background paint cannot be drawn on Rhema outputs" })
   }
   for (const node of groupNodesUnder(design.scene, pageRoot)) {
-    // A faded group (#448): the editor fades it as one picture. Fading each of its layers instead
-    // looks the same while none of them overlap, so that is saved; overlapping layers would show
-    // through each other, so they are refused.
-    if (Math.abs(node.opacity - 1) > 0.0001 && layersOverlap(design.scene, node.id)) {
-      issues.push({ nodeId: node.id, message: "A faded group whose layers overlap cannot be saved into a Rhema scene yet; fade the layers themselves, or move them apart" })
-    }
+    // A faded group (#448) is saved: the editor fades each of its layers by the group's opacity
+    // (saraswati/scene.ts listSaraswatiNodesInRenderOrder), and so does every output.
     if (Math.abs(node.rotation ?? 0) > 0.0001) {
       issues.push({ nodeId: node.id, message: "Group rotation cannot be saved into a Rhema scene yet" })
     }
@@ -340,7 +337,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       ...layerBinding,
       name: node.name ?? node.id,
       box: { x: round((size.x / DESIGN_WIDTH) * 100), y: round((size.y / DESIGN_HEIGHT) * 100), w: round((size.w / DESIGN_WIDTH) * 100), h: round((size.h / DESIGN_HEIGHT) * 100) },
-      opacity: round(node.opacity * groupOpacity),
+      opacity: groupOpacity === 1 ? node.opacity : round(node.opacity * groupOpacity),
       visible,
     } as SceneLayer
     delete layer.rotation
@@ -566,7 +563,7 @@ function liveWords(binding: RhemaBinding, live: LivePreviewInput): string | null
  */
 export function previewDesign(design: RhemaDesign, live: LivePreviewInput): SaraswatiScene {
   let preview = design.scene
-  for (const { node, visible, groupOpacity } of layerEntries(design.scene)) {
+  for (const { node, visible } of layerEntries(design.scene)) {
     const binding = design.bindings[node.id]
     if (!binding || !visible || node.type === "line") continue
     if (binding.kind === "logo" && live.logoUrl && "width" in node && "height" in node) {
@@ -580,7 +577,8 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
         rotation: node.rotation,
         scaleX: node.scaleX,
         scaleY: node.scaleY,
-        opacity: node.opacity * groupOpacity,
+        // It stays in its group, which fades it as it fades the layer it replaces.
+        opacity: node.opacity,
         originX: node.originX,
         originY: node.originY,
         type: "image",
@@ -602,24 +600,13 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
     preview = applyCommand(preview, {
       type: "ADD_NODE",
       node: {
-        id: `preview:${node.id}`, parentId: design.scene.root, name: `${node.name ?? node.id} (live)`, visible: true,
-        x: node.x, y: node.y + height / 2 - fontSize * 0.6, rotation: 0, scaleX: 1, scaleY: 1, opacity: node.opacity * groupOpacity, originX: "left", originY: "top",
+        // In the layer's own group, so the group fades it once, as it fades the layer.
+        id: `preview:${node.id}`, parentId: node.parentId ?? design.scene.root, name: `${node.name ?? node.id} (live)`, visible: true,
+        x: node.x, y: node.y + height / 2 - fontSize * 0.6, rotation: 0, scaleX: 1, scaleY: 1, opacity: node.opacity, originX: "left", originY: "top",
         type: "text", text: words, width, fontSize, fontFamily: "Helvetica", fontWeight: "600", fontStyle: "normal", textAlign: "center",
         lineHeight: 1.2, underline: false, color: { type: "solid", color: "#ffffff" }, stroke: null, strokeWidth: 0,
       },
     })
   }
   return preview
-}
-
-/** Whether any two layers in a group (at any depth) overlap on the artboard, as the editor bounds them. */
-function layersOverlap(scene: SaraswatiScene, groupId: string): boolean {
-  const boxes = layerEntries(scene, [], groupId).map(({ node }) => getNodeBounds(node))
-  for (let i = 0; i < boxes.length; i++) {
-    for (let j = i + 1; j < boxes.length; j++) {
-      const a = boxes[i]!, b = boxes[j]!
-      if (a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height) return true
-    }
-  }
-  return false
 }
