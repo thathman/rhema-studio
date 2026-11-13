@@ -138,6 +138,25 @@ describe("scene paint on a real canvas", () => {
     expect(differ / (1920 * 1080)).toBeLessThan(0.002)
   })
 
+  it("draws a layer's shadow and blur as the Avnac editor does (#448)", async () => {
+    const shadowed: Scene = { ...painted, id: "shadowed", backgroundGradient: undefined, background: "#ffffff", layers: [
+      layer("card", "color", { color: "#3157a4", box: { x: 20, y: 20, w: 30, h: 30 }, shadow: { color: "#000000", opacity: 0.6, blur: 20, x: 30, y: 25 } }),
+      layer("soft", "ellipse", { color: "#d14c62", box: { x: 60, y: 30, w: 25, h: 40 }, blur: 30 }),
+    ] }
+    const [editor, output] = [await drawEditor(shadowed), drawOutput(shadowed, 1920, 1080)]
+    const a = ctxOf(editor).getImageData(0, 0, 1920, 1080).data
+    const b = ctxOf(output).getImageData(0, 0, 1920, 1080).data
+    let differ = 0
+    for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
+    expect(differ / (1920 * 1080)).toBeLessThan(0.002)
+    // The shadow falls below and right of the card: darker than the white background there.
+    const under = pixel(output, 1920 * 0.5 + 20, 1080 * 0.5 + 10)
+    expect(under[0]).toBeLessThan(230)
+    // A stored scene keeps them; a bad shadow is dropped.
+    const stored = normalizeScene({ ...shadowed, layers: [...shadowed.layers, layer("bad", "color", { shadow: { color: "black", opacity: 2, blur: -1, x: 0, y: 0 } as never, blur: 900 })] })!
+    expect(stored.layers.map((l) => [l.id, l.shadow ?? null, l.blur ?? null])).toEqual([["card", shadowed.layers[0]!.shadow, null], ["soft", null, 30], ["bad", null, null]])
+  })
+
   it("puts each gradient's colours where the angle says, at 1920×1080 and 1280×720", () => {
     for (const [w, h] of [[1920, 1080], [1280, 720]] as const) {
       const c = drawOutput(painted, w, h)

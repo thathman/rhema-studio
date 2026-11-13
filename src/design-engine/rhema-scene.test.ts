@@ -96,6 +96,22 @@ describe("Rhema scenes in the Avnac engine", () => {
     }))
   })
 
+  it("saves a layer's shadow and blur and reopens them in the editor, on shapes, words and pictures only (#448)", () => {
+    const fx: Scene = { ...sermon, layers: [layer("card", "color", { color: "#3157a4", shadow: { color: "#000000", opacity: 0.6, blur: 20, x: 30, y: 25 }, blur: 10 })] }
+    const design = sceneToDesign(fx)
+    expect(design.scene.nodes.card).toMatchObject({ shadow: { colorHex: "#000000", opacityPct: 60, blur: 20, offsetX: 30, offsetY: 25 }, blur: 10 })
+    const back = designToScene(design)
+    expect(back.issues).toEqual([])
+    expect(back.scene.layers[0]).toMatchObject({ shadow: { color: "#000000", opacity: 0.6, blur: 20, x: 30, y: 25 }, blur: 10 })
+    // A camera draws itself: a shadow on it is refused, not silently dropped.
+    const cam = sceneToDesign({ ...sermon, layers: [layer("cam", "camera", { cameraUrl: "http://192.168.1.10:8889/pulpit/whep" })] })
+    const shadowedCam = { ...cam.scene, nodes: { ...cam.scene.nodes, cam: { ...cam.scene.nodes.cam, shadow: { colorHex: "#000000", opacityPct: 50, blur: 10, offsetX: 5, offsetY: 5 } } } } as typeof cam.scene
+    expect(designToScene({ ...cam, scene: shadowedCam }).issues).toContainEqual({ nodeId: "cam", message: expect.stringContaining("this live layer cannot have them yet") })
+    // A shadow beyond what outputs draw is refused with its limits.
+    const wild = { ...design.scene, nodes: { ...design.scene.nodes, card: { ...design.scene.nodes.card, shadow: { colorHex: "#000000", opacityPct: 50, blur: 900, offsetX: 0, offsetY: 0 } } } } as typeof design.scene
+    expect(designToScene({ ...design, scene: wild }).issues).toContainEqual({ nodeId: "card", message: expect.stringContaining("blur up to 200 px") })
+  })
+
   it("roundtrips solid Avnac ellipses as editable Rhema scene layers and refuses unsupported paint", () => {
     const ellipseScene: Scene = { ...sermon, layers: [layer("oval", "ellipse", { color: "#d14c62" })] }
     const design = sceneToDesign(ellipseScene)

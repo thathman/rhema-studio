@@ -1,11 +1,11 @@
 import { imageCacheVersion } from "@/lib/theme-image-cache"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
-import { clockText } from "@/lib/scenes"
+import { clockText, EFFECT_KINDS } from "@/lib/scenes"
 import { drawTicker } from "@/lib/ticker-draw"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { drawBars, drawStatic, noSignalOf } from "@/lib/no-signal"
 import { layerTurns, turnAbout } from "@/lib/scene-rotation"
-import { applyCanvas2DClipPath, paintCanvas2DStyle, roundedCanvas2DRectPath } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
+import { applyCanvas2DClipPath, applyCanvas2DEffects, paintCanvas2DStyle, roundedCanvas2DRectPath } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
 import { textLineHeight } from "@/vendor/avnac/saraswati/utils/text"
 import type { ImageDraw, LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, Ticker } from "@/types"
 
@@ -523,8 +523,20 @@ export function drawScene(ctx: CanvasRenderingContext2D, canvasWidth: number, ca
     // A turned layer (#851 G7) turns about the point the design editor turns it about.
     if (layerTurns(l.kind) && l.rotation) turnAbout(ctx, layerPivot(ctx, l, r, height, span), l.rotation)
     ctx.globalAlpha = l.opacity
+    // Its shadow and blur (#448), as the editor sets them before drawing a node: sizes are artboard
+    // px, scaled with the frame (a canvas shadow ignores the transform). A fading layer gets them
+    // when its finished picture is drawn here, which is the same as on each of its strokes.
+    const fx = (l.shadow || l.blur) && EFFECT_KINDS.has(l.kind)
+    if (fx) {
+      const k = height / 1080
+      applyCanvas2DEffects(ctx, {
+        shadow: l.shadow ? { colorHex: l.shadow.color, opacityPct: l.shadow.opacity * 100, blur: l.shadow.blur * k, offsetX: l.shadow.x * k, offsetY: l.shadow.y * k } : null,
+        blur: (l.blur ?? 0) * k,
+      })
+    }
     if (opts.fader && l.fadeMs && !opts.preview && !opts.cameraBelow?.(l.id)) paintFading(ctx, l, r, height, opts, opts.fader, span)
     else paintLayer(ctx, l, r, height, opts, span)
+    if (fx) applyCanvas2DEffects(ctx, { shadow: null, blur: 0 })
     if (opts.preview && l.label) {
       ctx.globalAlpha = 1
       ctx.globalCompositeOperation = "source-over"
