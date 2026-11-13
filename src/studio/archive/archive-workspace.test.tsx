@@ -67,7 +67,7 @@ describe("Archive calendar dates", () => {
     expect(glance.textContent).toContain("October 2026")
     const serviceCount = [...glance.querySelectorAll("dt")].find((node) => node.textContent === "Services this month")
     expect(serviceCount?.nextElementSibling?.textContent).toBe("1")
-    expect(serviceCount?.nextElementSibling?.nextElementSibling?.textContent).toBe("2 items in all")
+    expect(serviceCount?.nextElementSibling?.nextElementSibling?.textContent).toBe("2 items")
     expect(host.textContent).toContain("History and records.")
     expect(host.textContent).toContain("Reviewing a run never changes an output or restores a service.")
     expect(host.querySelector('[aria-label="Rhema-native recordings"]')).not.toBeNull()
@@ -80,7 +80,12 @@ describe("Archive calendar dates", () => {
     expect(glance.textContent).toContain("Month uses Asia/Tokyo church time")
     const novemberCount = [...glance.querySelectorAll("dt")].find((node) => node.textContent === "Services this month")
     expect(novemberCount?.nextElementSibling?.textContent).toBe("1")
-    expect(novemberCount?.nextElementSibling?.nextElementSibling?.textContent).toBe("5 items in all")
+    expect(novemberCount?.nextElementSibling?.nextElementSibling?.textContent).toBe("5 items")
+
+    // Event-first (#404): services with events are counted by their events.
+    await act(async () => useServiceStore.setState({ programs: [{ ...savedService("November 1", "2026-11-01", 5), event_count: 2 }, { ...savedService("November 8", "2026-11-08", 7), event_count: 3 }] as never }))
+    const eventCount = [...glance.querySelectorAll("dt")].find((node) => node.textContent === "Services this month")
+    expect(eventCount?.nextElementSibling?.nextElementSibling?.textContent).toBe("5 events · 12 items in all")
   })
 
   it("shows the system-timezone fallback and keeps saved service dates stable on another laptop", async () => {

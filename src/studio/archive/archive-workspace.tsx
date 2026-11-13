@@ -41,7 +41,7 @@ export function ArchiveWorkspace() {
     ? `Month uses ${timeZone} church time. Saved service dates stay on their calendar day.`
     : `Month uses this computer's time${systemTimeZone() ? ` (${systemTimeZone()})` : ""}. Saved service dates stay on their calendar day.`
   const stats: Array<[string, string, string]> = [
-    ["Services this month", String(thisMonth.length), thisMonth.length ? `${thisMonth.reduce((n, p) => n + p.item_count, 0)} items in all` : "None dated this month yet"],
+    ["Services this month", String(thisMonth.length), thisMonth.length ? savedServiceCount(thisMonth.reduce((t, p) => ({ item_count: t.item_count + p.item_count, event_count: t.event_count + (p.event_count ?? 0) }), { item_count: 0, event_count: 0 })) : "None dated this month yet"],
     ["Saved services", String(services.length), "On this computer"],
     ["Approved", String(services.filter((p) => approvalState(p) === "approved").length), "Ready for their Sunday"],
   ]

@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PlusIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, UsersIcon, ShieldCheckIcon } from "lucide-react"
+import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PlusIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, UsersIcon, ShieldCheckIcon, CableIcon } from "lucide-react"
 import { useState } from "react"
 import { defaultFilter } from "cmdk"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -16,6 +16,7 @@ const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string
   ["library", "Library", <LibraryBigIcon key="i" />, "songs hymns bible slides media files"],
   ["design", "Design", <PaletteIcon key="i" />, "themes looks studio"],
   ["permissions", "Permissions", <ShieldCheckIcon key="i" />, "paired devices roles access approval requests"],
+  ["connections", "Connections", <CableIcon key="i" />, "tvs receivers camera phones remotes obs computers pairing nearby devices discover"],
   ["archive", "History", <ArchiveIcon key="i" />, "past services execution records logs"],
   ["team", "Team", <UsersIcon key="i" />, "team approvals comments church folder remote"],
 ]
@@ -41,17 +42,21 @@ const LIBRARY: ReadonlyArray<readonly [LibrarySection, string, string]> = [
   ["designs", "Visual designs", "designs saved versions pinned"],
   ["media", "Pictures & videos", "pictures images photos videos media"],
   ["audio", "Sounds", "sounds audio music mp3 walk-in backing track sting"],
+  ["collections", "Collections", "collections sets groups favourites saved lists"],
   ["files", "Import & export", "import export files backup songs openlyrics"],
 ]
 
 const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [
   ["appearance", "Appearance", "light dark mode system theme night preferences"],
   ["church", "Church and profile", "church name campus ministry time zone your name operator computer name profile"],
-  ["bible", "Bible and languages", "translations second language yoruba"],
+  ["screens", "Outputs", "screens projector ndi displays settings"],
+  ["bible", "Bible", "translations second language yoruba"],
   ["audio", "Audio", "microphone input level"],
-  ["speech", "Speech recognition", "listening detection transcript deepgram cloud key api keys whisper"],
-  ["display", "Display", "live behaviour"],
+  ["speech", "Speech Recognition", "listening detection transcript deepgram cloud key api keys whisper"],
+  ["display", "Heard verses", "display live behaviour detected verses"],
   ["remote", "Remote Control", "osc http stream deck phone"],
+  ["assistants", "AI assistants", "ai mcp claude assistant drafts"],
+  ["data", "Data & Sync", "data sync church folder backup restore"],
   ["diagnostics", "Diagnostics", "logs support export"],
   ["help", "Help", "tour shortcuts about"],
 ]
