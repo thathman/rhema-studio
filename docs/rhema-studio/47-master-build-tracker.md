@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.5.3.0 · 13 Nov 2026 · main `21c4a2df`**
+**Version 1.5.4.0 · 13 Nov 2026 · main `5724334c`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -140,5 +140,5 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Area | Status |
 | --- | --- |
 | Rhema Comms (full-duplex held PTT, notices) | MERGED (phases C1–C4: notices, action requests with Seen/Ready/Unable, host-hub voice with channels, private calls and priority ducking; `src/lib/voice.ts`, `/api/v1/voice`). Not yet run with three or more real speakers. |
-| Rhema Engage (congregation quiz) | AUTOMATED TESTED | In the app: host control, quiz editor, on-screen follow (#933). Internet quiz service deployed on the owner's approval, 13 Nov: `https://rhema-engage.airix-mediia.workers.dev` (Cloudflare Worker, 19/19 service tests). All four keys set by the owner (Turnstile widget for the Worker's hostname). Live check, 13 Nov: wrong host key refused (401); a reviewed one-question quiz made a room (201); its join page answers; its state is refused without a session (401); the host's state shows the lobby and no answer key before reveal; Delete removed it (then 410). Still to do: a room from Rhema Studio's Live → Engage Quiz and phones joining on mobile data (owner). |
+| Rhema Engage (congregation quiz) | PHYSICAL TESTED | Service live at `https://rhema-engage.airix-mediia.workers.dev` (owner-approved deploy and keys, 13 Nov). Full run 13 Nov, QA host at #940 → Onn TV, Vsmart joining over the internet (Wi-Fi, no SIM): the owner created the lobby in Live → Engage Quiz; Show on Rhema's screens put the lobby (join link, code, players) on the Onn; the player count rose when the Vsmart joined (Turnstile check ticked by the owner); questions showed without the answer, the reveal with it and the answered count; the Vsmart's answer was received and scored; Finish held the scores until Show scores, then the Onn showed "1. Vsmart · 100 points"; Take off returned Live to John 3:21; Delete quiz data cleared the room. Not yet: phones on mobile data, more than one player. |
 | MCP service-draft and design tools | MERGED in part: 16 service tools with revision checks, resources and prompts; design capabilities, list, read (`rhema_get_design`), validate, create-draft and revise-draft (`rhema_update_design_draft`) (#664); a service draft is accepted whole, item by item, added after the service, or into one chosen event (#934). |
