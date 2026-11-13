@@ -32,6 +32,9 @@ export function AiDrafts() {
   const [picking, setPicking] = useState<{ id: string; out: Set<string> } | null>(null)
   const current = useServiceStore((s) => s.current)
   const rundown = useQueueStore((s) => s.items)
+  // The open service's events: a draft's items can go into one of them (per event) instead of as new phases.
+  const events = useQueueStore((s) => s.headers).filter((h) => h.event)
+  const [into, setInto] = useState<Record<string, string>>({})
   const count = rundown.length
   const dirty = useServiceStore((s) => s.dirty)
   // The church's looks and scenes: a suggestion naming one becomes the item's look or scene.
@@ -71,6 +74,21 @@ export function AiDrafts() {
   // Added after the open service's own items, as its own phases (#252): nothing already planned changes.
   const addDraft = (d: AiDraft) => {
     const { items, headers } = draftToRundown(leaveOut(d, outOf(d)), undefined, names)
+    if (into[d.id]) {
+      // Into one event: the items alone, at its end; the draft's own phases and events are not added.
+      // An event gone since it was chosen adds nothing, never somewhere else.
+      const target = useQueueStore.getState().headers.find((h) => h.id === into[d.id] && h.event)
+      if (!target || !useQueueStore.getState().appendRundown(items, [], target.id)) {
+        setInto((m) => ({ ...m, [d.id]: "" }))
+        toast.error("The chosen event is no longer in this service", { description: "Nothing was added. Choose another event." })
+        return
+      }
+      setPicking(null)
+      setOpen(false)
+      void invoke("ai_draft_mark_opened", { id: d.id, by: useSettingsStore.getState().operatorName || null }).catch(() => {}).then(load)
+      toast.success(`${items.length} ${items.length === 1 ? "item" : "items"} from ${d.title} added at the end of ${target.name}`, { description: "Unsaved: check them, source anything marked Missing, then save. Undo takes them out again." })
+      return
+    }
     // Its phases join as plain sections: the service keeps its own main phase, start time and loops.
     const plain = headers.map((h) => {
       if (h.type !== "phase") return h
@@ -159,7 +177,13 @@ export function AiDrafts() {
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       <Button size="sm" disabled={items.length === 0} onClick={() => openDraft(d)} title="Put this draft in the rundown here, as an unsaved service">{items.length < all ? `Open ${items.length} of ${all} items in the rundown` : isOpened(d) ? "Open again in the rundown" : "Open in the rundown"}</Button>
-                      {count > 0 && <Button size="sm" variant="outline" disabled={items.length === 0} onClick={() => addDraft(d)} title="Add these items after the service you have open, as new phases; nothing already in it changes">Add to this service</Button>}
+                      {count > 0 && <Button size="sm" variant="outline" disabled={items.length === 0} onClick={() => addDraft(d)} title={into[d.id] ? "Add these items at the end of the chosen event; nothing already in it changes" : "Add these items after the service you have open, as new phases; nothing already in it changes"}>{into[d.id] ? "Add to this event" : "Add to this service"}</Button>}
+                      {count > 0 && events.length > 0 && (
+                        <select aria-label={`Add ${d.title} into`} value={events.some((h) => h.id === into[d.id]) ? into[d.id] : ""} onChange={(e) => setInto((m) => ({ ...m, [d.id]: e.target.value }))} className="h-8 max-w-48 rounded-md border border-input bg-transparent px-2 text-xs">
+                          <option value="">as new phases at the end</option>
+                          {events.map((h) => <option key={h.id} value={h.id}>into: {h.name}</option>)}
+                        </select>
+                      )}
                       <Button size="sm" variant="outline" aria-expanded={choosing} onClick={() => setPicking(choosing ? null : { id: d.id, out: new Set() })}>{choosing ? "Keep every item" : "Choose items"}</Button>
                       {confirmRemove === d.id ? (
                         <span role="alert" className="flex flex-wrap items-center gap-2">
