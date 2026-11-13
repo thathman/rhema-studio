@@ -51,10 +51,12 @@ Code: `src-tauri/crates/content/src/design_proposal.rs` (check and build),
     `fontWeight` "400"–"900", `fontStyle`, `textAlign`, `lineHeight` 0.5–3, `color` `#rrggbb`, `underline`.
   - `rect`, `ellipse`: `fill`, either solid `#rrggbb` or a linear gradient (angle −360–360, 2–16 stops
     of `#rrggbb`/`#rrggbbaa` at offsets 0–1 in order).
+    Optional `outline: { color: "#rrggbb", width: 0.5–200 }` (centred on the edge, as outputs draw it,
+    #448), and on a `rect`, `corner` 0–540 px.
   - `picture`: `mediaId` of an image in the media library whose file is present. Screens fill the box,
     keeping the picture's shape, and the Design editor shows the same (#662).
 - **Refused by name, never dropped or flattened:** lines, arrows, polygons, stars; rotation,
-  flipping, shadow, blur, outlines, rounded corners; gradient or non-hex text colours; pictures by
+  flipping, shadow, blur; the editor's own `stroke`/`radius` fields (use `outline`/`corner`); gradient or non-hex text colours; pictures by
   address (`src`, `url`, `imageUrl`, `href`: web, file or data URLs); crops and masks (people add them in
   the editor); control and text-direction characters (U+202A–202E, U+2066–2069, U+200E/F, U+FEFF) in
   any title or words; any unknown field; `id`, `revision`, `version`, `design`, `designRef`,
