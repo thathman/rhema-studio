@@ -536,7 +536,8 @@ function paintRegion(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: Rect,
     const v = l.vector, sx = r.w / v.width, sy = r.h / v.height
     const xs = v.type === "polygon" ? v.points.map((p) => r.x + r.w / 2 + p.x * sx) : [r.x + v.x1 * sx, r.x + v.x2 * sx]
     const ys = v.type === "polygon" ? v.points.map((p) => r.y + r.h / 2 + p.y * sy) : [r.y + v.y1 * sy, r.y + v.y2 * sy]
-    const pad = Math.ceil(((l.outline?.width ?? 0) * 2 + (v.type === "line" ? 72 : 0)) * height / 1080) + 2
+    // A mitred outline can reach about 5× its width past a sharp point.
+    const pad = Math.ceil(((l.outline?.width ?? 0) * 5 + (v.type === "line" ? 72 : 0)) * height / 1080) + 2
     const x0 = Math.floor(Math.min(r.x, ...xs)) - pad, y0 = Math.floor(Math.min(r.y, ...ys)) - pad
     const x1 = Math.ceil(Math.max(r.x + r.w, ...xs)) + pad, y1 = Math.ceil(Math.max(r.y + r.h, ...ys)) + pad
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }

@@ -224,6 +224,10 @@ describe("scene paint on a real canvas", () => {
     const ruleOut = drawOutput(normalizeScene(ruled.scene)!, 1920, 1080)
     expect(near(pixel(ruleOut, 4, 540), WHITE)).toBe(true)
     expect(near(pixel(ruleOut, 1915, 540), WHITE)).toBe(true)
+    // A turned star hanging off the page is refused (outputs would turn it about the part on the page).
+    const offTurned = { ...star, id: "off", x: -100, rotation: 30 }
+    const off = designToScene({ ...withPaths, scene: applyCommand(scene, { type: "ADD_NODE", node: offTurned as never }), bindings: { ...withPaths.bindings, off: { id: "off", kind: "color" as const } } })
+    expect(off.issues).toContainEqual({ nodeId: "off", message: expect.stringContaining("fully on the page") })
     // Reopened in the editor, they are a polygon and a line again, and save the same.
     const reopened = sceneToDesign(saved.scene)
     expect(Object.values(reopened.scene.nodes).map((n) => n.type).filter((t) => t === "polygon" || t === "line").sort()).toEqual(["line", "polygon"])

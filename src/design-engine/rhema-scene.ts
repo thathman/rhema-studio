@@ -499,6 +499,9 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       else if ("issue" in edge) issues.push({ nodeId: node.id, message: edge.issue })
       else if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) issues.push({ nodeId: node.id, message: "Polygon clipping cannot be saved into a Rhema scene yet" })
       else if (!(node.width >= 0.01 && node.height >= 0.01) || node.scaleX <= 0 || node.scaleY <= 0) issues.push({ nodeId: node.id, message: "A polygon must keep a positive size and scale for Rhema outputs" })
+      // Off the page and turned or graded: outputs would turn or grade it about the part on the
+      // page, not about the whole shape as the editor does.
+      else if ((size.x !== rawSize.x || size.y !== rawSize.y || size.w !== rawSize.w || size.h !== rawSize.h) && (Math.abs(node.rotation ?? 0) > 0.0001 || gradient)) issues.push({ nodeId: node.id, message: "A turned or gradient polygon must sit fully on the page for Rhema outputs; move it onto the page" })
       else {
         layer.color = gradient ? gradientFallback(gradient) : node.fill.type === "solid" ? node.fill.color : "#000000"
         if (gradient) layer.gradient = gradient
