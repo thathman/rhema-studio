@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/describe-error"
 import { currentSecrets } from "@/stores/settings-store"
 import { useEffect, useState } from "react"
 import { DownloadIcon, LoaderCircleIcon } from "lucide-react"
@@ -58,7 +59,7 @@ export function DiagnosticsSection() {
       await writeTextFile(path, contents)
       toast.success("Logs saved", { description: path })
     } catch (error) {
-      toast.error("Could not save logs", { description: String(error) })
+      toast.error("Could not save logs", { description: describeError(error) })
     } finally {
       setSaving(false)
     }

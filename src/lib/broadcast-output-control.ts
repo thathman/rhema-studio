@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/describe-error"
 import { availableMonitors } from "@tauri-apps/api/window"
 import { meaningfulMonitorName, resolveMonitorIndex } from "@/lib/monitor-health"
 import { toast } from "sonner"
@@ -239,7 +240,7 @@ export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
     void logError(`[broadcast-ui] enable output '${output.id}' FAILED: ${String(error)}`)
     toast.error(
       output.type === "display" ? "Could not open display output" : "Could not start NDI",
-      { description: String(error) },
+      { description: describeError(error) },
     )
     return false
   }
@@ -272,7 +273,7 @@ export async function disableOutput(output: BroadcastOutput): Promise<boolean> {
     return true
   } catch (error) {
     void logError(`[broadcast-ui] disable output '${output.id}' FAILED: ${String(error)}`)
-    toast.error("Could not stop output", { description: String(error) })
+    toast.error("Could not stop output", { description: describeError(error) })
     return false
   }
 }

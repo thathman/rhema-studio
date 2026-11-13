@@ -22,7 +22,5 @@ export function restoreFailedTitle(e: unknown): string {
     : "Nothing was changed"
 }
 
-export function describeError(e: unknown): string {
-  if (typeof e === "object" && e !== null && "message" in e) return String((e as { message: unknown }).message)
-  return e instanceof Error ? e.message : String(e)
-}
+export { describeError } from "@/lib/describe-error"
+import { describeError } from "@/lib/describe-error"

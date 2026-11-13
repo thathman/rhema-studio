@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/describe-error"
 import { useEffect, useRef, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
@@ -438,7 +439,7 @@ function SafetySection() {
           {paths && (
             <span className="flex shrink-0 gap-1.5">
               <Button size="sm" variant="outline" onClick={() => copy(paths.database)}>Copy</Button>
-              <Button size="sm" variant="ghost" onClick={() => void showDataFolder().catch((e) => toast.error(String(e)))}>Show in folder</Button>
+              <Button size="sm" variant="ghost" onClick={() => void showDataFolder().catch((e) => toast.error("Could not show the folder", { description: describeError(e) }))}>Show in folder</Button>
             </span>
           )}
         </li>

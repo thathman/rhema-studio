@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/describe-error"
 import { useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
@@ -20,7 +21,7 @@ export const audioTestActions = {
       })
       useAudioStore.getState().setTesting(true)
     } catch (e) {
-      toast.error("Could not start audio test", { description: String(e) })
+      toast.error("Could not start audio test", { description: describeError(e) })
     }
   },
 

@@ -13,6 +13,7 @@ export function RecoveryBanner() {
   const durableRuns = useRecovery((s) => s.durableRuns)
   const durableRunsDismissed = useRecovery((s) => s.durableRunsDismissed)
   const [busy, setBusy] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const draft = useDraftRecovery((s) => s.offer)
   const draftError = useDraftRecovery((s) => s.error)
   // Unsaved Prepare edits from before Rhema Studio closed (#411): planning only, nothing goes Live.
@@ -39,25 +40,18 @@ export function RecoveryBanner() {
       <Button size="sm" variant="ghost" onClick={dismissDurableRunNotice}>Dismiss</Button>
     </div>
   ) : null
-  if (damaged) {
-    return (
-      <>
-        <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm">
-          <p className="min-w-0 flex-1">{durableRuns.length ? "Local recovery data could not be read. A durable service checkpoint remains available in History." : "Saved recovery data could not be read. Nothing was restored."}</p>
-          <Button size="sm" variant="ghost" onClick={dismissRecoveryDamage}>Dismiss</Button>
-        </div>
-        {durableNotice}
-        {draftNotice}
-      </>
-    )
-  }
-  if (!offer || dismissed) return <>{durableNotice}{draftNotice}</>
-  const at = new Date(offer.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  const what = [offer.isLive && offer.liveVerse ? offer.liveVerse.reference || "a slide" : null, offer.outputsOn.length ? `${offer.outputsOn.length} output${offer.outputsOn.length === 1 ? "" : "s"} on` : null].filter(Boolean).join(" · ")
-  return (
-    <>
-      {durableNotice}
-      {draftNotice}
+  // One attention line at a time (UX audit §5.6), most serious first; "+N more" shows the rest.
+  const damageNotice = damaged ? (
+    <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm">
+      <p className="min-w-0 flex-1">{durableRuns.length ? "Local recovery data could not be read. A durable service checkpoint remains available in History." : "Saved recovery data could not be read. Nothing was restored."}</p>
+      <Button size="sm" variant="ghost" onClick={dismissRecoveryDamage}>Dismiss</Button>
+    </div>
+  ) : null
+  let crashNotice: React.ReactNode = null
+  if (offer && !dismissed && !damaged) {
+    const at = new Date(offer.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    const what = [offer.isLive && offer.liveVerse ? offer.liveVerse.reference || "a slide" : null, offer.outputsOn.length ? `${offer.outputsOn.length} output${offer.outputsOn.length === 1 ? "" : "s"} on` : null].filter(Boolean).join(" · ")
+    crashNotice = (
       <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-on-air/40 bg-on-air/10 px-4 py-2 text-sm">
         <p className="min-w-0 flex-1">
           <span className="font-semibold">Rhema Studio closed unexpectedly at {at}{offer.service ? ` during ${offer.service.title}` : ""}.</span>{" "}
@@ -68,6 +62,21 @@ export function RecoveryBanner() {
         {restoreError && <Button size="sm" variant="outline" disabled={busy} onClick={acceptPartialRecovery}>Continue with available state</Button>}
         <Button size="sm" variant="ghost" title="The Desk menu keeps this until Rhema Studio closes" onClick={dismissRecovery}>Not now</Button>
       </div>
+    )
+  }
+  const notices = [crashNotice, damageNotice, draftNotice, durableNotice].filter((n): n is React.ReactElement => n !== null)
+  if (notices.length === 0) return null
+  const shown = showAll ? notices : notices.slice(0, 1)
+  return (
+    <>
+      {shown.map((n, i) => <div key={i} className="contents">{n}</div>)}
+      {notices.length > 1 && (
+        <div className="flex justify-end border-b border-border bg-muted/20 px-4 py-1">
+          <Button size="xs" variant="ghost" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "Show one at a time" : `+${notices.length - 1} more`}
+          </Button>
+        </div>
+      )}
     </>
   )
 }

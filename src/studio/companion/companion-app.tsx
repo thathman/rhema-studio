@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/describe-error"
 import { useEffect, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { Toaster, toast } from "sonner"
@@ -34,7 +35,7 @@ function ThisApp() {
   const change = (on: boolean) =>
     invoke<boolean>("autostart_set", { on }).then(
       (now) => setStart(now === true),
-      (e) => toast.error("Not changed", { description: String(e) }),
+      (e) => toast.error("Not changed", { description: describeError(e) }),
     )
   return (
     <section aria-label="This app" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 text-xs">

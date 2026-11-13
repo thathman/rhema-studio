@@ -62,6 +62,10 @@ describe("recovery damage notice", () => {
       durableRunsDismissed: false,
     }))
 
+    // One attention line at a time (UX audit §5.6): the damage notice first, the checkpoint behind "+1 more".
+    expect(host.textContent).toContain("could not be read")
+    expect(host.textContent).not.toContain("Sunday service")
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "+1 more")!.click())
     expect(host.textContent).toContain("Sunday service")
     expect(host.textContent).toContain("Time after the last confirmed checkpoint is unknown")
     expect(host.textContent).not.toContain("Put back on the screens")
