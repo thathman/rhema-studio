@@ -68,7 +68,7 @@ describe("Archive calendar dates", () => {
     const serviceCount = [...glance.querySelectorAll("dt")].find((node) => node.textContent === "Services this month")
     expect(serviceCount?.nextElementSibling?.textContent).toBe("1")
     expect(serviceCount?.nextElementSibling?.nextElementSibling?.textContent).toBe("2 items")
-    expect(host.textContent).toContain("History and records.")
+    expect(host.querySelector("h1")?.textContent).toBe("History")
     expect(host.textContent).toContain("Reviewing a run never changes an output or restores a service.")
     expect(host.querySelector('[aria-label="Rhema-native recordings"]')).not.toBeNull()
     expect(host.textContent).not.toContain("Backups")
@@ -129,9 +129,9 @@ describe("Archive calendar dates", () => {
     const open = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Open run-1")!
     await act(async () => open.click())
     expect(host.querySelector("[aria-label=\"Service run chronology\"]")?.textContent).toContain("run-1")
-    expect(host.textContent).not.toContain("History and records.")
+    expect(host.querySelector("h1")?.textContent).not.toBe("History")
     const back = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Back to History")!
     await act(async () => back.click())
-    expect(host.textContent).toContain("History and records.")
+    expect(host.querySelector("h1")?.textContent).toBe("History")
   })
 })

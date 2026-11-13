@@ -80,8 +80,7 @@ export function DesignWorkspace() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-4 max-[1200px]:px-5">
         <div className="min-w-0">
-          <p className="eyebrow">The creative workspace</p>
-          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Choose, customize, and use your designs.</h1>
+          <h1 className="text-2xl leading-tight font-semibold tracking-tight">Design</h1>
           <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Start in My Designs: choose a scene template, customize a private draft, then create a version for Prepare. A design version changes public output only through the normal approval and explicit Take flow.</p>
           <p className="mt-0.5 max-w-3xl text-xs text-muted-foreground">{SAVE_VOCABULARY}</p>
         </div>

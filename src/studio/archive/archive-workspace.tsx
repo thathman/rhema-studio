@@ -68,8 +68,7 @@ export function ArchiveWorkspace() {
       <div className="mx-auto flex max-w-[1700px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="eyebrow">Every Sunday has a story</p>
-            <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">History and records.</h1>
+            <h1 className="text-2xl leading-tight font-semibold tracking-tight">History</h1>
             {/* #824 F13: the records are not edited here, but logs can be kept, saved and deleted, so it does not claim "read-only". */}
             <p className="mt-1 text-xs text-muted-foreground">Every saved service, and what happened during each run. Reviewing a run never changes an output or restores a service. You can keep, save or delete logs and add after-action notes; the run's own record is never rewritten.</p>
           </div>

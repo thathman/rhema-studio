@@ -1218,8 +1218,7 @@ export function SettingsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 px-8 pt-6 pb-4 max-[1200px]:px-5">
-        <p className="eyebrow">Control, without complexity</p>
-        <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Settings, precisely organised.</h1>
+        <h1 className="text-2xl leading-tight font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-xs text-muted-foreground">Preferences apply at once. Your data stays on this computer unless you choose a shared church folder.</p>
       </header>
       <div className="grid min-h-0 flex-1 grid-cols-[255px_minmax(0,1fr)] gap-5 px-8 pb-6 max-[1200px]:grid-cols-[220px_minmax(0,1fr)] max-[1200px]:px-5">

@@ -386,8 +386,7 @@ export function LibraryWorkspace() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 px-[29px] pt-[26px] pb-4 max-[1200px]:px-5">
         <div className="min-w-0">
-          <p className="eyebrow">Everything in its place</p>
-          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Your creative library.</h1>
+          <h1 className="text-2xl leading-tight font-semibold tracking-tight">Library</h1>
           <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
             {section === "designs"
               ? "Browse and customize the same local, versioned design documents used in Design and Prepare. Draft saves stay private and do not change a screen."
