@@ -60,6 +60,7 @@ vi.mock("@chenglou/pretext/rich-inline", () => {
 
 import {
   computeVerseLayoutMetrics,
+  textClipped,
   layOutLanguages,
   measureVerseHeight,
   renderVerse,
@@ -234,6 +235,18 @@ describe("computeVerseLayoutMetrics — stacked mode", () => {
     expect(metrics.referenceRect).toBeNull()
     expect(metrics.verseRect).toBeNull()
     expect(metrics.fittedVerseFontSize).toBeUndefined()
+  })
+})
+
+describe("words too long for the screen (#217)", () => {
+  it("says a verse is cut off only when even the smallest size does not fit", () => {
+    const theme = BUILTIN_THEMES[0]
+    expect(computeVerseLayoutMetrics(stubCtx(), theme, { reference: "John 3:16", segments: [{ text: "For God so loved the world" }] }).clipped).toBe(false)
+    const long = { reference: "Psalm 119", segments: [{ text: "Blessed are the undefiled in the way, who walk in the law of the Lord. ".repeat(60) }] }
+    expect(computeVerseLayoutMetrics(stubCtx(), theme, long).clipped).toBe(true)
+    expect(computeVerseLayoutMetrics(stubCtx(), theme, null).clipped).toBeFalsy()
+    expect(textClipped(theme, long, stubCtx())).toBe(true)
+    expect(textClipped(theme, long, null)).toBe(false)
   })
 })
 
