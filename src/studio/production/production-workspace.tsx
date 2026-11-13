@@ -436,7 +436,7 @@ const ICON: Record<ReadinessCheck["status"], React.ReactNode> = {
   info: <InfoIcon className="size-4 text-muted-foreground" />,
 }
 
-function Health() {
+export function Health() {
   const { ready, checks, openOutputs, setWorkspace } = useReadiness()
   const needs = useNeeds()
   const fix = (c: ReadinessCheck) => (c.fix === "outputs" ? openOutputs() : c.fix === "prepare" ? setWorkspace("prepare") : c.fix === "cameras" ? openProductionTab("cameras") : c.fix === "obs" ? openProductionTab("obs") : openSettings("diagnostics"))

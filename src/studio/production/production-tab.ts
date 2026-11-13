@@ -8,7 +8,6 @@ export type LiveToolsTab = "bible" | "listening" | "production" | "controls"
 export const PRODUCTION_TABS: ReadonlyArray<readonly [ProductionTab, string]> = [
   ["timekeeper", "Timer"],
   ["screens", "Screens"],
-  ["health", "Show health"],
   ["obs", "OBS"],
   ["cameras", "Cameras"],
   ["operators", "Operators"],
@@ -33,7 +32,9 @@ export const useProductionTab = create<{
   expanded: Partial<Record<LiveToolsTab, boolean>>
   /** Live tools was opened by a link (openProductionTab), so it starts as the strip. */
   linked: boolean
-}>(() => ({ requested: null, selected: "timekeeper", scene: null, open: false, liveToolsTab: "bible", liveOutputId: null, expanded: {}, linked: false }))
+  /** Show health is a side sheet over any page (UX audit slice 4), not a Live tool. */
+  healthOpen: boolean
+}>(() => ({ requested: null, selected: "timekeeper", scene: null, open: false, liveToolsTab: "bible", liveOutputId: null, expanded: {}, linked: false, healthOpen: false }))
 
 /**
  * Whether this Live tools tab is the tall panel (#812 F1). The operator's own choice wins. Without
@@ -54,6 +55,10 @@ export function setLiveToolsExpanded(tab: LiveToolsTab, value: boolean): void {
 }
 
 export function openProductionTab(tab: ProductionTab, opts: { sceneId?: string } = {}): void {
+  if (tab === "health") {
+    useProductionTab.setState({ healthOpen: true })
+    return
+  }
   // Scenes ("programs") are arranged in Design → Scenes now (UX audit slice 4); old links land there, at the scene.
   if (tab === "programs") {
     useProductionTab.setState({ requested: null, scene: opts.sceneId ?? null })
