@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
 import { act } from "react"
 import { createRoot } from "react-dom/client"
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+// The host's reusable slides: the whole library, whatever the Library's own search shows.
+const hostSlides = vi.hoisted(() => ({ list: [] as unknown[], calls: 0 }))
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async (cmd: string) => {
+  if (cmd !== "content_list_reusable_slides") return null
+  hostSlides.calls += 1
+  return hostSlides.list
+}) }))
 import type { ReusableSlide, SlideQueueItem } from "@/types"
 import { useQueueStore } from "@/stores/queue-store"
-import { useSlideStore } from "@/stores/slide-store"
 import { copyAtSourceRevision } from "@/studio/library/slide-items"
 import { CustomSlideEditor } from "./item-editor-parts"
 
@@ -34,7 +41,7 @@ describe("a service copy of a reusable slide (#395)", () => {
 
   it("says when the source is newer and updates only on request", async () => {
     useQueueStore.setState({ items: [copy] })
-    useSlideStore.setState({ slides: [source(3)], loading: false })
+    hostSlides.list = [source(3)]
     const el = document.createElement("div")
     const root = createRoot(el)
     await act(async () => root.render(<CustomSlideEditor item={copy} />))
@@ -50,10 +57,17 @@ describe("a service copy of a reusable slide (#395)", () => {
   })
 
   it("says nothing when the copy is current", async () => {
-    useSlideStore.setState({ slides: [source(2)], loading: false })
+    hostSlides.list = [source(2)]
     const el = document.createElement("div")
     const root = createRoot(el)
     await act(async () => root.render(<CustomSlideEditor item={copy} />))
+    expect(el.textContent).not.toContain("was changed since")
+    // An empty library (the source was deleted) asks once, not again and again.
+    hostSlides.list = []
+    hostSlides.calls = 0
+    await act(async () => root.render(<CustomSlideEditor item={{ ...copy, id: "i2" }} />))
+    await act(async () => new Promise<void>((r) => setTimeout(r, 50)))
+    expect(hostSlides.calls).toBeLessThanOrEqual(1)
     expect(el.textContent).not.toContain("was changed since")
     act(() => root.unmount())
   })
