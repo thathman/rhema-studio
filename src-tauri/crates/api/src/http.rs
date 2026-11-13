@@ -667,6 +667,8 @@ impl Revisions {
             ("offset".to_string(), serde_json::json!([v["timing"]["offsetMinutes"], v["timing"]["offsetBy"]]).to_string()),
             ("timer".to_string(), serde_json::json!([v["timer"]["running"], v["timer"]["durationMs"], v["timer"]["revision"]]).to_string()),
             ("hold".to_string(), v["hold"].to_string()),
+            // What is on the congregation screens: on air, which reference, and where in a song (#827).
+            ("program".to_string(), serde_json::json!([v["program"]["onAir"], v["program"]["reference"], v["lyrics"]["itemId"], v["lyrics"]["index"]]).to_string()),
             // The song or hymn on the screens and where in it (desk consoles): a section step from a
             // Worship desk acts on the section it saw.
             ("lyrics".to_string(), serde_json::json!([v["lyrics"]["itemId"], v["lyrics"]["index"]]).to_string()),
@@ -779,6 +781,10 @@ fn revision_part(cmd: &RemoteCommand) -> Option<String> {
     Some(match cmd {
         RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => "event".into(),
         RemoteCommand::EventOffset(_) => "offset".into(),
+        // What the congregation screens show (#827): a step from where they are, or putting them back
+        // on, acts on the screen it saw. Hide is never refused (taking the screens off is always
+        // safe); Bible activate and song show name exactly what to show, so they are not either.
+        RemoteCommand::Next | RemoteCommand::Prev | RemoteCommand::VerseNext | RemoteCommand::VersePrev | RemoteCommand::Show | RemoteCommand::Hide | RemoteCommand::SendToLive => "program".into(),
         RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) => "timer".into(),
         RemoteCommand::Hold(_) | RemoteCommand::Resume => "hold".into(),
         RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => format!("source:{id}"),
@@ -808,6 +814,8 @@ fn command_revision_parts(cmd: &RemoteCommand) -> Vec<String> {
         RemoteCommand::GroupTakeScene(take) => group_take_revision_parts(take),
         // A single Take acts on the scene it previewed too: an edit since makes it stale (#410).
         RemoteCommand::TakeScene(t) => vec![format!("output:{}", t.output), format!("scene:{}", t.scene)],
+        // Hide moves the screens' revision but is never refused for it.
+        RemoteCommand::Hide => Vec::new(),
         _ => revision_part(cmd).into_iter().collect(),
     }
 }
@@ -1509,6 +1517,7 @@ struct AppState<S: CommandSink> {
     pairing: PairingWindow,
     rate: crate::rate::RateLimiter,
     recent: RecentIds,
+    own: OwnPresses,
     /// One command at a time from its revision check to the app: two desks pressing at once are
     /// carried out one after the other, and the second is checked against the first.
     gate: std::sync::Mutex<()>,
@@ -1576,6 +1585,7 @@ where
         pairing: config.pairing.clone(),
         rate: crate::rate::RateLimiter::default(),
         recent: RecentIds::default(),
+        own: OwnPresses::default(),
         gate: std::sync::Mutex::new(()),
     });
 
@@ -1990,6 +2000,57 @@ struct CommandRequest {
 const OTHER_SERVICE_MESSAGE: &str = "That desk is looking at a different service; it will refresh";
 /// What a desk acting on what it saw is told when someone changed that part of the service first.
 pub const STALE_MESSAGE: &str = "Someone changed this first \u{2014} look again";
+
+/// A press the same desk may repeat quickly (#827): a step, or putting the screens on or off. Its
+/// second press, sent before its Live State caught up with its first, is not stale against its own
+/// first (`OwnPresses`). Anything that sets a value (a save, OBS record, a song order change) is
+/// still refused when sent from an old view.
+fn is_step(cmd: &RemoteCommand) -> bool {
+    matches!(
+        cmd,
+        RemoteCommand::Next | RemoteCommand::Prev | RemoteCommand::VerseNext | RemoteCommand::VersePrev | RemoteCommand::Show | RemoteCommand::Hide | RemoteCommand::SendToLive | RemoteCommand::SongSection(_)
+    )
+}
+
+/// Each part's run of quick presses by one desk (#827): who, the revision before its first press
+/// (`floor`), and how far its own presses can have moved the part (`ceiling`): one when the server
+/// takes the press, one when the screens publish it. A change from anywhere else (another desk, the
+/// main desk, a timed advance, an unchecked Bible or song show) moves the part past the ceiling, and
+/// another desk's press replaces the run, so either makes the desk's next press stale.
+// ponytail: any press whose publish changes nothing (Show when already on, Next with nowhere to
+// go) leaves one move of slack, so one change from elsewhere inside 5 s can pass. Give the reserved
+// move back on the next unchanged publish if that ever matters.
+#[derive(Default)]
+struct OwnPresses(std::sync::Mutex<std::collections::HashMap<String, OwnRun>>);
+
+struct OwnRun {
+    by: String,
+    floor: u64,
+    ceiling: u64,
+    at: std::time::Instant,
+}
+
+impl OwnPresses {
+    const FOR: std::time::Duration = std::time::Duration::from_secs(5);
+
+    /// `by`'s press, sent having seen `sent`, moved `part` from `before` to `after` (the server's own move).
+    fn note(&self, part: &str, by: &str, sent: Option<u64>, before: u64, after: u64) {
+        let mut own = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let run = match own.get(part) {
+            // The same run: the desk pressed from behind, and every move since its floor was its own.
+            // A desk that saw the part as it was starts a new run, so no slack carries over.
+            Some(r) if r.by == by && r.at.elapsed() < Self::FOR && sent.is_some_and(|sent| sent < before) && before <= r.ceiling => OwnRun { by: r.by.clone(), floor: r.floor, ceiling: r.ceiling + 2, at: std::time::Instant::now() },
+            _ => OwnRun { by: by.to_string(), floor: before, ceiling: after + 1, at: std::time::Instant::now() },
+        };
+        own.insert(part.to_string(), run);
+    }
+
+    /// Whether every move of `part` from `sent` to `now` was `by`'s own recent press.
+    fn covers(&self, part: &str, by: &str, sent: u64, now: u64) -> bool {
+        let own = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        own.get(part).is_some_and(|r| r.by == by && r.at.elapsed() < Self::FOR && sent >= r.floor && now <= r.ceiling)
+    }
+}
 
 /// Command ids seen recently, so an exact retry is not carried out twice and a reused id is refused.
 #[derive(Default)]
@@ -3543,7 +3604,7 @@ async fn command_handler<S: CommandSink + 'static>(
         if let Some(seen) = request.seen.as_ref() {
             for part in command_revision_parts(&command) {
                 if let (Some(sent), Some(now)) = (seen.get(&part), state.live.revision(&part)) {
-                    if *sent != now {
+                    if *sent != now && !(is_step(&command) && by_id.as_deref().is_some_and(|me| state.own.covers(&part, me, *sent, now))) {
                         log::info!("HTTP command {command:?} from {by} refused: {part} changed since (revision {sent}, now {now})");
                         return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(STALE_MESSAGE.into()), code: Some("stale"), ..Default::default() }));
                     }
@@ -3613,6 +3674,8 @@ async fn command_handler<S: CommandSink + 'static>(
         }
         drop(turn);
     }
+    // Each part's revision before the app sees the press: its publish may land before the bump below.
+    let before: Vec<(String, Option<u64>)> = changed_revision_parts(&command).into_iter().map(|part| { let r = state.live.revision(&part); (part, r) }).collect();
     let done = match (&command, why) {
         (RemoteCommand::NoticeAck(_), Some(why)) => CommandDispatcher::dispatch_from(&command, &WithWhy { inner: &*state.sink, why: &why }, &by, by_id.as_deref()),
         _ => CommandDispatcher::dispatch_from(&command, &*state.sink, &by, by_id.as_deref()),
@@ -3624,8 +3687,11 @@ async fn command_handler<S: CommandSink + 'static>(
             }
             // A change that waits for the main desk has not changed the scene yet: another desk may still act on it.
             if !waits && !reserve_group_outputs {
-                for part in changed_revision_parts(&command) {
+                for (part, before) in before {
                     state.live.bump(&part);
+                    if let (Some(me), Some(before), Some(after)) = (by_id.as_deref(), before, state.live.revision(&part)) {
+                        state.own.note(&part, me, request.seen.as_ref().and_then(|seen| seen.get(&part)).copied(), before, after);
+                    }
                 }
             }
             // A single Take answers with its output's new revision (#410): the desk knows it is
@@ -3855,6 +3921,7 @@ mod tests {
             pairing: new_pairing_window(),
             rate: crate::rate::RateLimiter::default(),
             recent: RecentIds::default(),
+            own: OwnPresses::default(),
             gate: std::sync::Mutex::new(()),
         })
     }
@@ -6645,7 +6712,11 @@ mod tests {
             assert_eq!(part(event).as_deref(), Some("event"));
         }
         assert_eq!(part(r#"{"command":"event_offset","value":5}"#).as_deref(), Some("offset"));
-        for unchecked in [r#"{"command":"verse_next"}"#, r#"{"command":"bible_activate","value":"John 3:16"}"#, r#"{"command":"notice_ack","value":{"id":"n","state":"seen"}}"#, r#"{"command":"next"}"#] {
+        for screen in [r#"{"command":"next"}"#, r#"{"command":"prev"}"#, r#"{"command":"verse_next"}"#, r#"{"command":"verse_prev"}"#, r#"{"command":"show"}"#, r#"{"command":"hide"}"#, r#"{"command":"send_to_live"}"#] {
+            assert_eq!(part(screen).as_deref(), Some("program"), "{screen}");
+        }
+        assert!(command_revision_parts(&RemoteCommand::Hide).is_empty(), "Hide is never refused");
+        for unchecked in [r#"{"command":"bible_next"}"#, r#"{"command":"bible_activate","value":"John 3:16"}"#, r#"{"command":"song_show","value":"Amazing Grace"}"#, r#"{"command":"notice_ack","value":{"id":"n","state":"seen"}}"#] {
             assert_eq!(part(unchecked), None, "{unchecked}");
         }
     }
@@ -6665,6 +6736,8 @@ mod tests {
         hold: Option<String>,
         bible_on: bool,
         bible_revision: u64,
+        /// The slide on the congregation screens (#827): Next and Prev move it.
+        slide: i64,
         /// The service log: one line per command carried out.
         journal: Vec<String>,
         /// Service s1 is approved with only this scene pinned (#410); None: not approved.
@@ -6678,6 +6751,8 @@ mod tests {
                 "outputs": [{ "id": "main", "name": "Main", "sceneId": self.scene, "sceneRevision": self.scene_revision }],
                 "sources": [{ "id": "bible", "reference": "John 3:16", "on": self.bible_on, "revision": self.bible_revision }],
                 "hold": self.hold.as_ref().map(|r| serde_json::json!({ "reason": r, "since": 1 })),
+                "program": { "onAir": true, "reference": "Song", "rehearsal": false },
+                "lyrics": { "itemId": "song", "index": self.slide },
             })
             .to_string()
         }
@@ -6707,6 +6782,8 @@ mod tests {
                     // The hold store logs its own line (src/stores/hold-store.ts).
                     "remote:hold" => if m.hold.is_none() { m.hold = Some(p["reason"].as_str().unwrap_or("").to_string()); m.journal.push(format!("{by}: hold")); },
                     "remote:resume" => if m.hold.take().is_some() { m.journal.push(format!("{by}: resumed")); },
+                    "remote:next" => m.slide += 1,
+                    "remote:prev" => m.slide -= 1,
                     // The app's log line for each other command (use-remote-control.ts).
                     "remote:audit" => m.journal.push(format!("{} · by {by}", p["command"].as_str().unwrap_or("?"))),
                     _ => {}
@@ -6742,6 +6819,49 @@ mod tests {
         assert_eq!((m.scene, m.scene_revision, m.journal.len()), (None, 0, 0), "nothing reached the output");
         assert_eq!(read_revisions(port, "ka").await, seen, "no revision moved");
         assert_eq!(press(port, "ka", take("choir")).await.0, 200, "the pinned scene goes through");
+        handle.stop();
+    }
+
+    /// #827: a step acts on the screen the desk saw. The same desk's quick second press, before its
+    /// Live State caught up with its first, goes through; a press after someone else's is refused;
+    /// Hide always goes through.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_step_acts_on_the_screen_it_saw_but_a_quick_second_press_is_not_stale() {
+        let host = HostSim::new(Model::default());
+        let (port, mut handle) = sim_server(&host).await;
+        let seen = read_revisions(port, "ka").await;
+        let next = |seen: &serde_json::Value| serde_json::json!({ "command": "next", "seen": seen });
+        assert_eq!(press(port, "ka", next(&seen)).await.0, 200);
+        settle().await;
+        assert_eq!(press(port, "ka", next(&seen)).await.0, 200, "Desk A's own press moved it, nobody else");
+        settle().await;
+        let (status, body) = press(port, "kb", next(&seen)).await;
+        assert_eq!(status, 409, "Desk B saw the screen before Desk A's presses: {body}");
+        assert!(body.contains(r#""code":"stale""#), "{body}");
+        let b_seen = read_revisions(port, "kb").await;
+        assert_eq!(press(port, "kb", next(&b_seen)).await.0, 200, "Desk B looked again");
+        settle().await;
+        assert_eq!(press(port, "ka", next(&seen)).await.0, 409, "Desk B pressed in between: Desk A looks again");
+        assert_eq!(press(port, "ka", serde_json::json!({ "command": "hide", "seen": seen })).await.0, 200, "Hide is never stale");
+        settle().await;
+        assert_eq!(host.model.lock().unwrap().slide, 3, "three steps carried out, the refused ones not");
+        // A run of Desk A's own presses, then Show: still its own.
+        let a_seen = read_revisions(port, "ka").await;
+        assert_eq!(press(port, "ka", next(&a_seen)).await.0, 200);
+        settle().await;
+        assert_eq!(press(port, "ka", serde_json::json!({ "command": "show", "seen": a_seen })).await.0, 200, "Show after its own Next");
+        settle().await;
+        // The main desk (or a Bible show, or a timed advance) changes the screens by publishing:
+        // Desk A's next step from before that is refused, even inside its own run.
+        let a_seen = read_revisions(port, "ka").await;
+        assert_eq!(press(port, "ka", next(&a_seen)).await.0, 200);
+        settle().await;
+        {
+            let mut m = host.model.lock().unwrap();
+            m.slide += 10;
+            host.live.publish(m.live_state());
+        }
+        assert_eq!(press(port, "ka", next(&a_seen)).await.0, 409, "a change that was not Desk A's own");
         handle.stop();
     }
 
