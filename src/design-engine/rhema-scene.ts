@@ -11,13 +11,15 @@ import {
   type SaraswatiEllipseNode,
   type SaraswatiGroupNode,
   type SaraswatiImageNode,
+  type SaraswatiLineNode,
+  type SaraswatiPolygonNode,
   type SaraswatiNode,
   type SaraswatiRectNode,
   type SaraswatiScene,
   type SaraswatiTextNode,
 } from "../vendor/avnac/saraswati"
 import { anchorToCenter } from "../vendor/avnac/saraswati/transform/anchor"
-import type { CountdownTo, DesignPin, Scene, SceneCrop, SceneGradient, SceneLayer, SceneShadow } from "../types/scene"
+import type { CountdownTo, DesignPin, Scene, SceneCrop, SceneGradient, SceneLayer, SceneShadow, SceneVector } from "../types/scene"
 import { gradientCss, gradientFallback, gradientIssue, normalizeGradient } from "../lib/scene-gradient"
 import { imageDrawIssue, normalizeImageDraw } from "../lib/scene-image"
 import { layerRotation, layerTurns } from "../lib/scene-rotation"
@@ -138,6 +140,7 @@ function toNode(layer: SceneLayer): SaraswatiNode {
     }
     return ellipse
   }
+  if (layer.kind === "color" && layer.vector) return vectorNode(layer, layer.vector, width, height)
   const fill = layer.kind === "color" ? (layer.color ?? "#000000") : (PLACEHOLDER[layer.kind] ?? "#333333")
   const rect: SaraswatiRectNode = {
     ...basePaint(layer), type: "rect", width, height, fill: layer.kind === "color" && layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: fill },
@@ -320,7 +323,11 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
     // glyph-count estimate, which a long word stretches: outputs wrap at the box's width.
     const textWidth = node.type === "text" ? Math.max(1, node.width * Math.abs(node.scaleX)) : 0
     const textX = node.type === "text" ? anchorToCenter(node.x, node.originX, textWidth, true) - textWidth / 2 : 0
-    const size = textBounds
+    // A line's box (#448): its ends, with room for its stroke and arrowheads on every side.
+    const linePad = node.type === "line" ? Math.max(node.strokeWidth, Math.min(72, Math.max(5, Math.max(1, node.strokeWidth) * 2.25))) + Math.abs(node.pathType === "curved" ? node.curveBulge : 0) : 0
+    const size = node.type === "line"
+      ? { x: Math.min(node.x1, node.x2) - linePad, y: Math.min(node.y1, node.y2) - linePad, w: Math.abs(node.x2 - node.x1) + 2 * linePad, h: Math.abs(node.y2 - node.y1) + 2 * linePad }
+      : textBounds
       ? { w: textWidth, h: Math.max(textBounds.height, preservedTextHeight), x: textX, y: textBounds.y }
       : "width" in node && "height" in node
         ? { w: (node.width as number) * node.scaleX, h: (node.height as number) * node.scaleY, x: node.x, y: node.y }
@@ -473,8 +480,47 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         layer.color = gradientFallback(gradient)
         layer.gradient = gradient
       }
+    } else if (node.type === "polygon") {
+      // A polygon or star (#448): its points, filled and outlined as a rectangle is.
+      const gradient = node.fill.type === "gradient" ? normalizeGradient(node.fill) : undefined
+      const edge = shapeOutline(node, false)
+      const pts = node.points
+      const pointsOk = Array.isArray(pts) && pts.length >= 3 && pts.length <= 64 && pts.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+      if (binding.kind !== "color") issues.push({ nodeId: node.id, message: "A polygon needs a Rhema colour-layer binding" })
+      else if (!pointsOk) issues.push({ nodeId: node.id, message: "A polygon needs 3–64 points to be drawn on Rhema outputs" })
+      else if (node.fill.type === "gradient" && !gradient) issues.push({ nodeId: node.id, message: `This polygon gradient cannot be drawn on Rhema outputs: ${gradientIssue(node.fill)}` })
+      else if (node.fill.type === "solid" && !TEXT_COLOR.test(node.fill.color)) issues.push({ nodeId: node.id, message: "Polygon colours must be #rrggbb hex for Rhema scene output" })
+      else if (node.fill.type !== "solid" && node.fill.type !== "gradient") issues.push({ nodeId: node.id, message: "This polygon paint cannot be drawn on Rhema outputs" })
+      else if ("issue" in edge) issues.push({ nodeId: node.id, message: edge.issue })
+      else if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) issues.push({ nodeId: node.id, message: "Polygon clipping cannot be saved into a Rhema scene yet" })
+      else if (!(node.width > 0 && node.height > 0) || node.scaleX <= 0 || node.scaleY <= 0) issues.push({ nodeId: node.id, message: "A polygon must keep a positive size and scale for Rhema outputs" })
+      else {
+        layer.color = gradient ? gradientFallback(gradient) : node.fill.type === "solid" ? node.fill.color : "#000000"
+        if (gradient) layer.gradient = gradient
+        else delete layer.gradient
+        if (edge.outline) layer.outline = edge.outline
+        else delete layer.outline
+        delete layer.corner
+        layer.vector = { type: "polygon", width: node.width, height: node.height, points: pts.map((p) => ({ x: round(p.x), y: round(p.y) })) }
+      }
+    } else if (node.type === "line") {
+      // A line or arrow (#448): its ends in its box, stroked as the editor strokes it (solid, round caps).
+      const stroke = node.stroke
+      if (binding.kind !== "color") issues.push({ nodeId: node.id, message: "A line needs a Rhema colour-layer binding" })
+      else if (stroke.type !== "solid" || !TEXT_COLOR.test(stroke.color)) issues.push({ nodeId: node.id, message: "Line colours must be a solid #rrggbb for Rhema outputs" })
+      else if (!(node.strokeWidth >= 0.5 && node.strokeWidth <= 200)) issues.push({ nodeId: node.id, message: "Lines must be 0.5–200 px wide for Rhema outputs" })
+      else if (![node.x1, node.y1, node.x2, node.y2, node.curveBulge, node.curveT].every(Number.isFinite)) issues.push({ nodeId: node.id, message: "This line cannot be drawn on Rhema outputs" })
+      else {
+        layer.color = stroke.color
+        delete layer.gradient
+        delete layer.corner
+        delete layer.rotation
+        layer.outline = { color: stroke.color, width: round(node.strokeWidth) }
+        const curved = node.pathType === "curved" && node.curveBulge !== 0
+        layer.vector = { type: "line", width: round(size.w), height: round(size.h), x1: round(node.x1 - size.x), y1: round(node.y1 - size.y), x2: round(node.x2 - size.x), y2: round(node.y2 - size.y), arrowStart: node.arrowStart, arrowEnd: node.arrowEnd, curveBulge: curved ? round(node.curveBulge) : 0, curveT: curved ? round(node.curveT) : 0.5 }
+      }
     } else {
-      issues.push({ nodeId: node.id, message: "This Avnac shape cannot be saved as a Rhema scene layer yet" })
+      issues.push({ nodeId: (node as { id: string }).id, message: "This Avnac shape cannot be saved as a Rhema scene layer yet" })
     }
     layers.push(layer)
   }
@@ -676,4 +722,27 @@ function layerEffects(node: { shadow?: { colorHex: string; opacityPct: number; b
   if (!Number.isFinite(blur) || blur < 0 || blur > 100) return { issue: "Blur must be 0–100 for Rhema outputs" }
   if (blur > 0) out.blur = round(blur)
   return out
+}
+
+/** A colour layer's polygon or line (#448) as the editor's own node, so it reopens as drawn. */
+function vectorNode(layer: SceneLayer, v: SceneVector, width: number, height: number): SaraswatiNode {
+  const base = basePaint(layer)
+  if (v.type === "polygon") {
+    const polygon: SaraswatiPolygonNode = {
+      ...base, type: "polygon", width: v.width, height: v.height, scaleX: width / v.width, scaleY: height / v.height,
+      points: v.points.map((p) => ({ ...p })),
+      fill: layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: layer.color ?? "#000000" },
+      stroke: layer.outline ? { type: "solid", color: layer.outline.color } : null,
+      strokeWidth: layer.outline ? layer.outline.width / (width / v.width) : 0,
+    }
+    return polygon
+  }
+  const sx = width / v.width, sy = height / v.height
+  const line: SaraswatiLineNode = {
+    ...base, type: "line", rotation: 0,
+    x1: base.x + v.x1 * sx, y1: base.y + v.y1 * sy, x2: base.x + v.x2 * sx, y2: base.y + v.y2 * sy,
+    stroke: { type: "solid", color: layer.outline?.color ?? layer.color ?? "#ffffff" }, strokeWidth: layer.outline?.width ?? 4,
+    arrowStart: v.arrowStart, arrowEnd: v.arrowEnd, lineStyle: "solid", pathType: v.curveBulge ? "curved" : "straight", curveBulge: v.curveBulge, curveT: v.curveT,
+  }
+  return line
 }

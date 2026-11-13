@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowDownIcon, ArrowUpIcon, CircleIcon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, QrCodeIcon, Redo2Icon, SaveIcon, SquareIcon, TextIcon, Trash2Icon, Undo2Icon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, CircleIcon, CopyIcon, EyeIcon, EyeOffIcon, MoveRightIcon, PlusIcon, QrCodeIcon, Redo2Icon, SaveIcon, SquareIcon, StarIcon, TextIcon, Trash2Icon, Undo2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -9,7 +9,7 @@ import { designPages, designToScene, outputCoverPictures, previewDesign, type Li
 import { createCameraLayer, createClockLayer, createColorLayer, createLiveFeedLayer, createLogoLayer, createLowerThirdLayer, createTickerLayer } from "@/design-engine/design-document-utils"
 import { applyCommand, createSaraswatiEditorStore, getNodeBounds, pointerDown, pointerMove, pointerUp, type SaraswatiClipPath, type SaraswatiCommand, type SaraswatiImageNode, type SaraswatiPointerState } from "@/vendor/avnac/saraswati"
 import { renderSceneToCanvas } from "@/vendor/avnac/renderer/offscreen-render"
-import type { SaraswatiColor, SaraswatiEllipseNode, SaraswatiGroupNode, SaraswatiNode, SaraswatiRectNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
+import type { SaraswatiColor, SaraswatiEllipseNode, SaraswatiGroupNode, SaraswatiLineNode, SaraswatiNode, SaraswatiPolygonNode, SaraswatiRectNode, SaraswatiRenderableNode, SaraswatiScene, SaraswatiTextNode } from "@/vendor/avnac/saraswati"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
@@ -905,6 +905,43 @@ export function DesignDocumentEditor({
     )
     setSelectedId(id)
   }
+  // A star and an arrow (#448): drawn on every output as here, saved as colour layers.
+  const addStarLayer = () => {
+    const id = "star-" + (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2))
+    const size = Math.round(scene.artboard.height * 0.36)
+    const node: SaraswatiPolygonNode = {
+      id, parentId: activeRootId, name: "Star", visible: true,
+      x: Math.round(scene.artboard.width / 2 - size / 2), y: Math.round(scene.artboard.height / 2 - size / 2),
+      rotation: 0, scaleX: 1, scaleY: 1, opacity: 1, originX: "left", originY: "top",
+      type: "polygon", width: size, height: size,
+      points: Array.from({ length: 10 }, (_, i) => {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5, r = (i % 2 ? 0.4 : 1) * size / 2
+        return { x: Math.round(r * Math.cos(a)), y: Math.round(r * Math.sin(a)) }
+      }),
+      fill: { type: "solid", color: "#e2b04a" }, stroke: null, strokeWidth: 0,
+    }
+    editSceneWithBindings(
+      () => dispatch({ type: "ADD_NODE", node }),
+      (current) => ({ ...current, [id]: { id, kind: "color" } }),
+    )
+    setSelectedId(id)
+  }
+  const addArrowLayer = () => {
+    const id = "arrow-" + (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2))
+    const w = scene.artboard.width, h = scene.artboard.height
+    const node: SaraswatiLineNode = {
+      id, parentId: activeRootId, name: "Arrow", visible: true, x: 0, y: 0,
+      rotation: 0, scaleX: 1, scaleY: 1, opacity: 1, originX: "left", originY: "top",
+      type: "line", x1: Math.round(w * 0.3), y1: Math.round(h * 0.5), x2: Math.round(w * 0.7), y2: Math.round(h * 0.5),
+      stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 12, arrowStart: false, arrowEnd: true,
+      lineStyle: "solid", pathType: "straight", curveBulge: 0, curveT: 0.5,
+    }
+    editSceneWithBindings(
+      () => dispatch({ type: "ADD_NODE", node }),
+      (current) => ({ ...current, [id]: { id, kind: "color" } }),
+    )
+    setSelectedId(id)
+  }
   /**
    * A QR code layer (#851 G7): an ordinary picture layer holding the code for a safe http(s) link,
    * so it stays editable and saves into scenes like any other picture. The layer is named after
@@ -1244,6 +1281,8 @@ export function DesignDocumentEditor({
             <Button size="xs" variant="outline" onClick={addTextLayer} disabled={document.kind === "template"}><TextIcon /> Text</Button>
             <Button size="xs" variant="outline" onClick={addRectangleLayer} disabled={document.kind === "template"}><SquareIcon /> Rectangle</Button>
             <Button size="xs" variant="outline" onClick={addEllipseLayer} disabled={document.kind === "template"}><CircleIcon /> Ellipse</Button>
+            <Button size="xs" variant="outline" onClick={addStarLayer} disabled={document.kind === "template"}><StarIcon /> Star</Button>
+            <Button size="xs" variant="outline" onClick={addArrowLayer} disabled={document.kind === "template"}><MoveRightIcon /> Arrow</Button>
             <Button size="xs" variant="outline" onClick={openImagePicker} disabled={document.kind === "template" || imagePickerBusy}>
               {selectedRenderable?.type === "image" ? "Replace image" : "Image from Library"}
             </Button>

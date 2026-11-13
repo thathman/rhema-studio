@@ -276,7 +276,7 @@ const REVIEW_LAYER_FIELDS = [
   ["language", "Language"], ["cameraUrl", "Camera source"], ["cameraFallback", "Camera fallback"], ["noSignal", "No-signal behavior"],
   ["noSignalName", "Show no-signal name"], ["clockShows", "Clock display"], ["countdownTo", "Countdown event"],
   ["until", "Countdown target"], ["themeId", "Theme"], ["fadeMs", "Transition"], ["textWiden", "Long-word layout"],
-  ["textGradient", "Text gradient"], ["textOutline", "Text outline"], ["outline", "Outline"], ["corner", "Corners"], ["shadow", "Shadow"], ["blur", "Blur"],
+  ["textGradient", "Text gradient"], ["textOutline", "Text outline"], ["outline", "Outline"], ["corner", "Corners"], ["shadow", "Shadow"], ["blur", "Blur"], ["vector", "Shape"],
 ] as const
 
 function reviewedValue(key: string, value: unknown, cameraLabelForUrl?: CameraLabel): string {
@@ -285,6 +285,10 @@ function reviewedValue(key: string, value: unknown, cameraLabelForUrl?: CameraLa
   if (key === "outline" || key === "textOutline") {
     const o = plainRecord(value)
     return o ? `${String(o.color)} · ${String(o.width)} px` : "invalid"
+  }
+  if (key === "vector") {
+    const o = plainRecord(value)
+    return o?.type === "polygon" ? `polygon of ${Array.isArray(o.points) ? o.points.length : 0} points` : o?.type === "line" ? `line${o.arrowEnd || o.arrowStart ? " with arrowhead" : ""}` : "invalid"
   }
   if (key === "shadow") {
     const o = plainRecord(value)

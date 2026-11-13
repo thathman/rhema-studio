@@ -6,8 +6,9 @@ import { entranceProgress } from "@/lib/lower-third-style"
 import { drawBars, drawStatic, noSignalOf } from "@/lib/no-signal"
 import { layerTurns, turnAbout } from "@/lib/scene-rotation"
 import { applyCanvas2DClipPath, applyCanvas2DEffects, paintCanvas2DStyle, roundedCanvas2DRectPath } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
+import { renderCanvas2DLineCommand } from "@/vendor/avnac/renderer/backends/canvas2d/shapes"
 import { textLineHeight } from "@/vendor/avnac/saraswati/utils/text"
-import type { ImageDraw, LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, Ticker } from "@/types"
+import type { ImageDraw, LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, SceneVector, Ticker } from "@/types"
 
 export interface SceneDrawOptions {
   /** A loaded picture for a URL, or null while it loads (the caller loads it and redraws). */
@@ -372,9 +373,45 @@ export function feedLayerFresh(canvas: HTMLCanvasElement, l: Pick<SceneLayerFram
   return !!last && last.verse === l.verse && last.theme === l.theme && last.images === images && last.fonts === fontsLoaded && last.w === w && last.h === h
 }
 
+/**
+ * A colour layer's polygon or line (#448), as the Design editor draws it: a polygon's points around
+ * the box's centre, filled and then outlined; a line through the editor's own line drawing (round
+ * caps, arrowheads sized by its width). Sizes are artboard px, scaled with the frame.
+ */
+function paintVector(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, v: SceneVector, r: { x: number; y: number; w: number; h: number }, height: number): void {
+  const k = height / 1080
+  const sx = r.w / v.width, sy = r.h / v.height
+  if (v.type === "polygon") {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2
+    ctx.beginPath()
+    v.points.forEach((p, i) => (i === 0 ? ctx.moveTo(cx + p.x * sx, cy + p.y * sy) : ctx.lineTo(cx + p.x * sx, cy + p.y * sy)))
+    ctx.closePath()
+    ctx.fillStyle = scenePaint(ctx, l.color ?? "#000", l.gradient, r)
+    ctx.fill()
+    if (l.outline) {
+      ctx.strokeStyle = l.outline.color
+      ctx.lineWidth = l.outline.width * k
+      ctx.stroke()
+    }
+    return
+  }
+  const color = l.outline?.color ?? l.color ?? "#ffffff"
+  renderCanvas2DLineCommand(ctx, {
+    type: "line", id: l.id, x: r.x, y: r.y, rotation: 0, scaleX: 1, scaleY: 1, opacity: 1, originX: "left", originY: "top",
+    // The editor's drawing sets the layer's effects again (drawScene set them): the same, scaled.
+    shadow: l.shadow ? { colorHex: l.shadow.color, opacityPct: l.shadow.opacity * 100, blur: l.shadow.blur * k, offsetX: l.shadow.x * k, offsetY: l.shadow.y * k } : null,
+    blur: (l.blur ?? 0) * k,
+    x1: r.x + v.x1 * sx, y1: r.y + v.y1 * sy, x2: r.x + v.x2 * sx, y2: r.y + v.y2 * sy,
+    stroke: { type: "solid", color }, strokeWidth: (l.outline?.width ?? 4) * k,
+    arrowStart: v.arrowStart, arrowEnd: v.arrowEnd, lineStyle: "solid", pathType: v.curveBulge ? "curved" : "straight", curveBulge: v.curveBulge * Math.min(sx, sy), curveT: v.curveT,
+  })
+}
+
 /** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
 function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, span: FrameSpan): void {
-  if (l.kind === "color" && !l.corner && !l.outline) {
+  if (l.kind === "color" && l.vector) {
+    paintVector(ctx, l, l.vector, r, height)
+  } else if (l.kind === "color" && !l.corner && !l.outline) {
     ctx.fillStyle = scenePaint(ctx, l.color ?? "#000", l.gradient, r)
     ctx.fillRect(r.x, r.y, r.w, r.h)
   } else if (l.kind === "color" || l.kind === "ellipse") {
