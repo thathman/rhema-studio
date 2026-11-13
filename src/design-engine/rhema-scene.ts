@@ -186,28 +186,14 @@ function layerEntries(scene: SaraswatiScene, issues: DesignIssue[] = [], rootId 
     if (!node) return void issues.push({ nodeId: id, message: `"${id}" is listed in the design but missing from it` })
     if (node.type === "group") {
       if (!Array.isArray(node.children)) return void issues.push({ nodeId: id, message: `group "${id}" has no list of layers` })
-      node.children.forEach((child) => walk(child, visible && node.visible, groupOpacity * node.opacity))
+      // Clamped as the editor clamps a group's opacity.
+      node.children.forEach((child) => walk(child, visible && node.visible, groupOpacity * Math.max(0, Math.min(1, node.opacity))))
     } else {
       out.push({ node, visible: visible && node.visible, groupOpacity })
     }
   }
   walk(rootId, true, 1)
   return out
-}
-
-function groupNodesUnder(scene: SaraswatiScene, rootId: string): SaraswatiGroupNode[] {
-  const groups: SaraswatiGroupNode[] = []
-  const seen = new Set<string>()
-  const walk = (id: string) => {
-    if (seen.has(id)) return
-    seen.add(id)
-    const node = scene.nodes[id]
-    if (!node || node.type !== "group") return
-    groups.push(node)
-    if (Array.isArray(node.children)) node.children.forEach(walk)
-  }
-  walk(rootId)
-  return groups
 }
 
 function pageIssues(design: RhemaDesign): DesignIssue[] {
@@ -296,15 +282,11 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
   } else if (artboardBg.type !== "solid" && artboardBg.type !== "gradient") {
     issues.push({ nodeId: "__artboard__", message: "This background paint cannot be drawn on Rhema outputs" })
   }
-  for (const node of groupNodesUnder(design.scene, pageRoot)) {
-    if (Math.abs(node.opacity - 1) > 0.0001) {
-      issues.push({ nodeId: node.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" })
-    }
-    if (Math.abs(node.rotation ?? 0) > 0.0001) {
-      issues.push({ nodeId: node.id, message: "Group rotation cannot be saved into a Rhema scene yet" })
-    }
-  }
-  for (const { node, visible } of layerEntries(design.scene, issues, pageRoot)) {
+  // A faded or turned group is saved (#448): the editor fades each of its layers by the group's
+  // opacity (saraswati/scene.ts, listSaraswatiNodesInRenderOrder) and turning a group turns each of
+  // its layers (commands/reducer.ts, rotateGroupNode), leaving the group's own angle as a record it
+  // never draws. Outputs do the same: each layer with its own opacity and turn.
+  for (const { node, visible, groupOpacity } of layerEntries(design.scene, issues, pageRoot)) {
     const binding = design.bindings[node.id]
     if (!binding) {
       issues.push({ nodeId: node.id, message: `"${node.name ?? node.id}" was drawn in the editor; Rhema scenes cannot show it yet` })
@@ -340,7 +322,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       ...layerBinding,
       name: node.name ?? node.id,
       box: { x: round((size.x / DESIGN_WIDTH) * 100), y: round((size.y / DESIGN_HEIGHT) * 100), w: round((size.w / DESIGN_WIDTH) * 100), h: round((size.h / DESIGN_HEIGHT) * 100) },
-      opacity: node.opacity,
+      opacity: groupOpacity === 1 ? node.opacity : round(node.opacity * groupOpacity),
       visible,
     } as SceneLayer
     delete layer.rotation
@@ -579,7 +561,7 @@ function liveWords(binding: RhemaBinding, live: LivePreviewInput): string | null
  */
 export function previewDesign(design: RhemaDesign, live: LivePreviewInput): SaraswatiScene {
   let preview = design.scene
-  for (const { node, visible, groupOpacity } of layerEntries(design.scene)) {
+  for (const { node, visible } of layerEntries(design.scene)) {
     const binding = design.bindings[node.id]
     if (!binding || !visible || node.type === "line") continue
     if (binding.kind === "logo" && live.logoUrl && "width" in node && "height" in node) {
@@ -593,7 +575,8 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
         rotation: node.rotation,
         scaleX: node.scaleX,
         scaleY: node.scaleY,
-        opacity: node.opacity * groupOpacity,
+        // It stays in its group, which fades it as it fades the layer it replaces.
+        opacity: node.opacity,
         originX: node.originX,
         originY: node.originY,
         type: "image",
@@ -615,8 +598,9 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
     preview = applyCommand(preview, {
       type: "ADD_NODE",
       node: {
-        id: `preview:${node.id}`, parentId: design.scene.root, name: `${node.name ?? node.id} (live)`, visible: true,
-        x: node.x, y: node.y + height / 2 - fontSize * 0.6, rotation: 0, scaleX: 1, scaleY: 1, opacity: node.opacity * groupOpacity, originX: "left", originY: "top",
+        // In the layer's own group, so the group fades it once, as it fades the layer.
+        id: `preview:${node.id}`, parentId: node.parentId ?? design.scene.root, name: `${node.name ?? node.id} (live)`, visible: true,
+        x: node.x, y: node.y + height / 2 - fontSize * 0.6, rotation: 0, scaleX: 1, scaleY: 1, opacity: node.opacity, originX: "left", originY: "top",
         type: "text", text: words, width, fontSize, fontFamily: "Helvetica", fontWeight: "600", fontStyle: "normal", textAlign: "center",
         lineHeight: 1.2, underline: false, color: { type: "solid", color: "#ffffff" }, stroke: null, strokeWidth: 0,
       },
