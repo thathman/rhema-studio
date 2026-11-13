@@ -1,4 +1,5 @@
-import { BookOpenIcon, Maximize2Icon, MicIcon, Minimize2Icon, MonitorCogIcon, SlidersHorizontalIcon, XIcon } from "lucide-react"
+import { BookOpenIcon, ImageIcon, Maximize2Icon, MicIcon, Minimize2Icon, MonitorCogIcon, SlidersHorizontalIcon, SquareIcon, UndoIcon, XIcon } from "lucide-react"
+import { presentActions } from "@/studio/present-actions"
 import { DetectionsPanel } from "@/components/panels/detections-panel"
 import { TranscriptPanel } from "@/components/panels/transcript-panel"
 import { Button } from "@/components/ui/button"
@@ -108,6 +109,7 @@ export function LiveToolsDrawer({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <AlwaysThere />
             <Button
               type="button"
               variant="ghost"
@@ -165,6 +167,29 @@ export function LiveToolsDrawer({
           </TabsContent>
         </Tabs>
       </section>
+    </div>
+  )
+}
+
+/**
+ * Logo, Black and Back while Live tools are open (UX audit S1a): the one-touch row is replaced by the
+ * tools, but these three must never be more than one press away during a service.
+ */
+function AlwaysThere() {
+  const isLive = useBroadcastStore((s) => s.isLive)
+  const held = useBroadcastStore((s) => s.heldLive !== null)
+  const quickOnAir = useBroadcastStore((s) => s.liveVerse?.quickScreen ?? null)
+  return (
+    <div role="group" aria-label="Always-there screens" className="mr-2 flex items-center gap-1 border-r border-border pr-2">
+      <Button type="button" variant="outline" size="sm" aria-pressed={isLive && quickOnAir === "logo"} onClick={() => presentActions.quickScreen("logo")}>
+        <ImageIcon /> Logo
+      </Button>
+      <Button type="button" variant="outline" size="sm" aria-pressed={isLive && quickOnAir === "black"} onClick={() => presentActions.quickScreen("black")}>
+        <SquareIcon className="fill-current" /> Black
+      </Button>
+      <Button type="button" variant="outline" size="sm" disabled={!held} title="Back to what was live" onClick={presentActions.back}>
+        <UndoIcon /> Back
+      </Button>
     </div>
   )
 }

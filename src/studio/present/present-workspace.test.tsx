@@ -308,8 +308,28 @@ describe("Present's unified Live console", () => {
       isLive: true,
       liveVerse: { reference: "", segments: [], lines: [], quickScreen: "black" } as never,
     }))
-    expect(header.textContent).toContain("LIVE · Black")
+    // Taken, but no screen is on: the pill says so instead of LIVE (UX audit S1b).
+    expect(header.textContent).toContain("Not on any screen · Black")
+    expect(header.textContent).not.toContain("LIVE · Black")
     expect(header.querySelector('[role="status"]')?.textContent).toBe("On air: Black")
+    // A congregation screen on: LIVE. A Stage display alone does not count.
+    const base = useBroadcastStore.getState().outputs[0]!
+    await act(async () => useBroadcastStore.setState({
+      outputs: [{ ...base, id: "stage-only", role: "stage" }],
+      outputStatus: { "stage-only": { previewOpen: true, ndiActive: false } },
+    }))
+    expect(header.textContent).toContain("Not on any screen · Black")
+    // Nor does a signage loop in the lobby.
+    await act(async () => useBroadcastStore.setState({
+      outputs: [{ ...base, id: "lobby", role: "signage" as never }],
+      outputStatus: { lobby: { previewOpen: true, ndiActive: false } },
+    }))
+    expect(header.textContent).toContain("Not on any screen · Black")
+    await act(async () => useBroadcastStore.setState({
+      outputs: [{ ...base, id: "main-on", role: "congregation" }],
+      outputStatus: { "main-on": { previewOpen: true, ndiActive: false } },
+    }))
+    expect(header.textContent).toContain("LIVE · Black")
   })
 
   it("summarizes congregation output status without counting a live Stage display", async () => {

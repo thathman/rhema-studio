@@ -253,6 +253,10 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
     default:
       if (cmd === "plugin:store|get") return [null, false]
       if (cmd === "plugin:store|load") return 1
+      // Commands this shim does not know answer as an empty host would, not with null: a list is
+      // empty and a listener is stopped, so Design, History and Remote Control render (UX audit S10).
+      if (/(^|_)list(_|$)/.test(cmd)) return []
+      if (/^get_[a-z_]+_status$/.test(cmd)) return { running: false, port: null, lan: false }
       return null
   }
 }

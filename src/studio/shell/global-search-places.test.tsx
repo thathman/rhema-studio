@@ -31,6 +31,24 @@ async function render(node: React.ReactNode) {
 }
 
 // Moved from the retired More tools page (#809 R10): Find anything is the way to these places now.
+describe("Find anything names each Live tool (UX audit S1e)", () => {
+  it("typing obs finds the OBS tool and opens it on Live", async () => {
+    const { useProductionTab } = await import("@/studio/production/production-tab")
+    useShellStore.setState({ searchOpen: true, goRequest: null })
+    await render(<GlobalSearch />)
+    const input = document.querySelector("[cmdk-input]") as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "obs")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    const items = [...document.querySelectorAll("[cmdk-item]")].map((i) => i.textContent?.trim())
+    expect(items).toContain("Live · OBS")
+    const obs = [...document.querySelectorAll("[cmdk-item]")].find((i) => i.textContent?.trim() === "Live · OBS") as HTMLElement
+    await act(async () => obs.click())
+    expect(useProductionTab.getState()).toMatchObject({ selected: "obs", open: true, liveToolsTab: "production" })
+  })
+})
+
 describe("Find anything opens the real places", () => {
   it("Find anything: New service opens Prepare with the New service form", async () => {
     useShellStore.setState({ searchOpen: true, goRequest: null, newServiceOpen: false })
