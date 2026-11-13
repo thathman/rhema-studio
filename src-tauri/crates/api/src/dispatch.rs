@@ -114,6 +114,15 @@ impl CommandDispatcher {
             RemoteCommand::VoiceTalk(on) => sink.emit_event("remote:voice_talk", &serde_json::json!({ "on": on, "by": by, "byId": by_id }).to_string()),
             RemoteCommand::VoiceLeave => sink.emit_event("remote:voice_leave", &serde_json::json!({ "by": by, "byId": by_id }).to_string()),
             RemoteCommand::EventOffset(m) => sink.emit_event("remote:event_offset", &serde_json::json!({ "minutes": (*m).clamp(-30, 30), "by": by }).to_string()),
+            // Only a 24-hour "HH:MM" goes on; anything else is refused here.
+            RemoteCommand::EventStartAt(t) => {
+                let t = t.trim();
+                let ok = t.len() == 5 && t.as_bytes()[2] == b':' && t[..2].parse::<u8>().is_ok_and(|h| h < 24) && t[3..].parse::<u8>().is_ok_and(|m| m < 60) && t.bytes().filter(u8::is_ascii_digit).count() == 4;
+                if !ok {
+                    return Err(CommandError::TypeCoercion { expected: "a time as HH:MM".into(), got: t.chars().take(20).collect() });
+                }
+                sink.emit_event("remote:event_start_at", &serde_json::json!({ "at": t, "by": by }).to_string())
+            }
             RemoteCommand::TimerStart => sink.emit_event("remote:timer_start", &serde_json::json!({ "by": by }).to_string()),
             RemoteCommand::TimerPause => sink.emit_event("remote:timer_pause", &serde_json::json!({ "by": by }).to_string()),
             RemoteCommand::TimerAdjust(m) => sink.emit_event("remote:timer_adjust", &serde_json::json!({ "minutes": (*m).clamp(-10, 10), "by": by }).to_string()),
@@ -157,7 +166,7 @@ impl CommandDispatcher {
         sink: &dyn CommandSink,
     ) -> Result<(), CommandError> {
         match cmd {
-            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume | RemoteCommand::AuxTimer(_) | RemoteCommand::Record(_) => Self::dispatch_as(cmd, sink, "a remote"),
+            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::EventOffset(_) | RemoteCommand::EventStartAt(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume | RemoteCommand::AuxTimer(_) | RemoteCommand::Record(_) => Self::dispatch_as(cmd, sink, "a remote"),
             RemoteCommand::Next => sink.emit_event("remote:next", "{}"),
             RemoteCommand::Prev => sink.emit_event("remote:prev", "{}"),
             RemoteCommand::Theme(name) => {
@@ -377,6 +386,11 @@ mod tests {
         let (name, payload) = sink.last_event();
         assert_eq!(name, "remote:event_offset");
         assert_eq!(payload, r#"{"by":"Timekeeper","minutes":30}"#, "one step is at most 30 minutes, with who sent it");
+        CommandDispatcher::dispatch_as(&RemoteCommand::EventStartAt(" 10:40 ".into()), &sink, "Timekeeper").unwrap();
+        assert_eq!(sink.last_event(), ("remote:event_start_at".to_string(), r#"{"at":"10:40","by":"Timekeeper"}"#.to_string()));
+        for bad in ["24:00", "10:60", "1040", "10:4a", "ten forty", "+1:00", "é:00"] {
+            assert!(CommandDispatcher::dispatch_as(&RemoteCommand::EventStartAt(bad.into()), &sink, "Timekeeper").is_err(), "{bad}");
+        }
         CommandDispatcher::dispatch_as(&RemoteCommand::TimerAdjust(-25), &sink, "Timekeeper").unwrap();
         assert_eq!(sink.last_event(), ("remote:timer_adjust".to_string(), r#"{"by":"Timekeeper","minutes":-10}"#.to_string()));
     }

@@ -780,7 +780,7 @@ impl Revisions {
 fn revision_part(cmd: &RemoteCommand) -> Option<String> {
     Some(match cmd {
         RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => "event".into(),
-        RemoteCommand::EventOffset(_) => "offset".into(),
+        RemoteCommand::EventOffset(_) | RemoteCommand::EventStartAt(_) => "offset".into(),
         // What the congregation screens show (#827): a step from where they are, or putting them back
         // on, acts on the screen it saw. Hide is never refused (taking the screens off is always
         // safe); Bible activate and song show name exactly what to show, so they are not either.

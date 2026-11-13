@@ -23,6 +23,7 @@ const EXPECTED_EVENT_NAMES = [
   "remote:event_prev",
   "remote:event_start",
   "remote:event_offset",
+  "remote:event_start_at",
   "remote:timer_start",
   "remote:timer_pause",
   "remote:timer_adjust",
@@ -57,7 +58,7 @@ const EXPECTED_EVENT_NAMES = [
 describe("REMOTE_EVENTS", () => {
   it("has one entry per RemoteCommand variant that emits an event", () => {
     // Opacity is refused by the dispatcher and emits nothing (#411), so it has none.
-    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(47)
+    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(48)
   })
 
   it("matches the event names the Rust dispatcher emits", () => {

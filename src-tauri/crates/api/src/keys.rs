@@ -92,7 +92,7 @@ impl Role {
         match cmd {
             // Production notices and the talk channel are for everyone on the team (Rhema Comms, #251).
             RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => true,
-            RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
+            RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::EventStartAt(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
             // A verse or a song in the main desk's Preview only (nothing goes live): the editor too.
             RemoteCommand::BiblePreview(_) => matches!(self, Role::Present | Role::Configure | Role::Bible | Role::Editor),
             RemoteCommand::SongPreview(_) => matches!(self, Role::Present | Role::Configure | Role::Worship | Role::Editor),
@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn timekeeper_moves_only_the_event_clock() {
-        for cmd in [RemoteCommand::EventNext, RemoteCommand::EventPrev, RemoteCommand::EventStart("sermon".into()), RemoteCommand::EventOffset(5), RemoteCommand::TimerStart, RemoteCommand::TimerAdjust(1)] {
+        for cmd in [RemoteCommand::EventNext, RemoteCommand::EventPrev, RemoteCommand::EventStart("sermon".into()), RemoteCommand::EventOffset(5), RemoteCommand::EventStartAt("10:40".into()), RemoteCommand::TimerStart, RemoteCommand::TimerAdjust(1)] {
             assert!(Role::Timekeeper.allows(&cmd));
             assert!(Role::Present.allows(&cmd));
             assert!(Role::Configure.allows(&cmd));
