@@ -149,6 +149,9 @@ describe("the phone's battery and heat on the main computer (#213)", () => {
     expect(phoneWords(phone({ thermal: 3 })).warnings[0]).toMatch(/^The phone is hot/)
     expect(phoneWords(phone({ thermal: 1, cooling: true })).warnings[0]).toMatch(/^The phone is hot/)
     expect(phoneWords(phone({ thermal: 4 })).warnings[0]).toMatch(/critically hot/)
+    expect(phoneWords(phone({ temperature: 50.8, thermal: 0 })).warnings).toEqual(["The phone's battery is hot (51 °C): give it air or shade, or take it off its charger"])
+    expect(phoneWords(phone({ temperature: 44.9, thermal: 0 })).warnings).toEqual([])
+    expect(phoneWords(phone({ temperature: 50.8, thermal: 3 })).warnings).toHaveLength(1)
     expect(phoneWords(phone({ battery: null, temperature: null, thermal: null, charging: false })).text).toBe("Reporting")
   })
 
