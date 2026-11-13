@@ -166,6 +166,24 @@ describe("Prepare movement keeps the plan separate from Live", () => {
     expect(selectCollision(headerId, itemId, 20).collisions[0]?.id).toBe(headerId)
   })
 
+  it("moves a moment with Alt+↑/↓ on its row, keeps focus there and leaves Live alone (#444)", async () => {
+    const liveBefore = live()
+    const el = await render()
+    const row = [...el.querySelectorAll<HTMLButtonElement>("button[aria-current], button")].find((b) => b.textContent?.includes("Response") && b.title.includes("Alt+"))!
+    row.focus()
+    await act(async () => row.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true })))
+    expect(ids()).toEqual(["Prayer", "Scripture", "Response", "Sermon"])
+    await act(async () => row.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })))
+    expect(ids()).toEqual(["Prayer", "Scripture", "Response", "Sermon"])
+    await act(async () => row.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true })))
+    expect(ids()).toEqual(["Prayer", "Scripture", "Sermon", "Response"])
+    await act(async () => new Promise<void>((r) => requestAnimationFrame(() => r())))
+    expect(document.activeElement?.textContent).toContain("Response")
+    q().undo()
+    expect(ids()).toEqual(["Prayer", "Scripture", "Response", "Sermon"])
+    expect(live()).toEqual(liveBefore)
+  })
+
   it("moves an event with Enter and ArrowDown, undoes/redoes it, saves and reopens every moment and nested group", async () => {
     useServiceStore.setState({ current: { id: "service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 10 }, dirty: false })
     const before = order()

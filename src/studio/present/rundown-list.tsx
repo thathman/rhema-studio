@@ -134,7 +134,17 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 aria-selected={mode === "prepare" && picked.length > 1 ? inPick : undefined}
                 onClick={(e) => (mode === "prepare" ? pick(item, e) : preview(item))}
                 onDoubleClick={mode === "present" ? () => present(item, index) : undefined}
-                title={mode === "present" ? (audio ? "Click to preview, double-click to play audio on this computer; screens stay unchanged" : cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to open it in the editor; Live's Preview stays as it is"}
+                // Alt+↑/↓ moves it in Prepare without a mouse (#444); focus stays on the moved row.
+                onKeyDown={mode === "prepare" ? (e) => {
+                  if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return
+                  const other = items[index + (e.key === "ArrowUp" ? -1 : 1)]
+                  if (!other) return
+                  e.preventDefault()
+                  const row = e.currentTarget
+                  useQueueStore.getState().moveItemsToTarget([item.id], { kind: e.key === "ArrowUp" ? "before" : "after", itemId: other.id })
+                  requestAnimationFrame(() => row.focus())
+                } : undefined}
+                title={mode === "present" ? (audio ? "Click to preview, double-click to play audio on this computer; screens stay unchanged" : cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to open it in the editor; Live's Preview stays as it is. Alt+↑/↓ moves it"}
               >
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
                 {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={songLabel.startsWith("Hymn") ? "Hymn" : "Song"} />}
