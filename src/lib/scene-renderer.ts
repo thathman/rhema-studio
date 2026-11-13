@@ -229,10 +229,19 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
   ctx.fillStyle = color
   ctx.textAlign = align
   ctx.textBaseline = "top"
+  // As the editor paints words (#448): a gradient over the text box, an outline behind each line.
+  const paint = layer.textGradient ? scenePaint(ctx, color, layer.textGradient, r) : color
+  ctx.fillStyle = paint
+  const outline = layer.textOutline
   let y = r.y
   for (const line of lines) {
     if (line) {
       const x = align === "center" ? x0 + w / 2 : align === "right" ? x0 + w : x0
+      if (outline) {
+        ctx.strokeStyle = outline.color
+        ctx.lineWidth = (outline.width * frameHeight) / 1080
+        ctx.strokeText(line, x, y, w)
+      }
       ctx.fillText(line, x, y, w)
       if (layer.underline) {
         const width = Math.min(w, ctx.measureText(line).width)
@@ -241,7 +250,7 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
         ctx.beginPath()
         ctx.moveTo(left, underlineY)
         ctx.lineTo(left + width, underlineY)
-        ctx.strokeStyle = color
+        ctx.strokeStyle = paint
         ctx.lineWidth = Math.max(1, fontSize / 24)
         ctx.stroke()
       }

@@ -133,6 +133,9 @@ export interface SceneLayer {
   outline?: SceneOutline
   /** color: rounded corners, px on the 1920×1080 artboard (#448). */
   corner?: number
+  /** text: words painted with a gradient over the text box, drawn instead of `textColor` (which older builds show), and an outline behind them, as the editor draws them (#448). */
+  textGradient?: SceneGradient
+  textOutline?: SceneOutline
   /** color, ellipse, text, picture, logo: a drop shadow and a blur (0–100, the editor's percentage), as the editor draws them (#448). */
   shadow?: SceneShadow
   blur?: number
@@ -236,6 +239,8 @@ export interface SceneLayerFrame {
   gradient?: SceneGradient
   outline?: SceneOutline
   corner?: number
+  textGradient?: SceneGradient
+  textOutline?: SceneOutline
   shadow?: SceneShadow
   blur?: number
   /** text: static words and their version-pinned style, rendered by every subscribed output. */
