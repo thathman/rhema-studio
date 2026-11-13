@@ -89,6 +89,15 @@ describe("scene approval review", () => {
     expect(sceneLayerReviewSummary(panel)).toContain("gradient 45°")
   })
 
+  it("names words' gradient and outline in plain words when a desk's change drops them (#448)", () => {
+    const painted: SceneLayer = { ...textLayer("Glory"), textColor: "#d14c62", textGradient: { angle: 90, stops: [{ color: "#d14c62", offset: 0 }, { color: "#3157a4", offset: 1 }] }, textOutline: { color: "#ffffff", width: 6 } }
+    const before: Scene = { ...scene("Welcome"), layers: [painted] }
+    const model = sceneRequestReviewModel(request({ payload: { scene: { ...before, name: "Welcome", layers: [{ ...textLayer("Glory"), textColor: "#00ff00" }] } } }), [before])
+    const said = model.changes.join(" ")
+    expect(said).not.toContain("[object Object]")
+    expect(said).toContain("Text gradient")
+  })
+
   it("shows concrete layer geometry, style, and order changes", () => {
     const before = scene("Welcome")
     const subtitle: SceneLayer = { ...textLayer("Sunday service"), id: "subtitle", name: "Subtitle", box: { x: 5, y: 34, w: 90, h: 12 } }

@@ -281,7 +281,15 @@ const REVIEW_LAYER_FIELDS = [
 
 function reviewedValue(key: string, value: unknown, cameraLabelForUrl?: CameraLabel): string {
   if (value === undefined || value === null) return "unset"
-  if (key === "gradient") return gradientReviewValue(value)
+  if (key === "gradient" || key === "textGradient") return gradientReviewValue(value)
+  if (key === "outline" || key === "textOutline") {
+    const o = plainRecord(value)
+    return o ? `${String(o.color)} · ${String(o.width)} px` : "invalid"
+  }
+  if (key === "shadow") {
+    const o = plainRecord(value)
+    return o ? `${String(o.color)} at ${Math.round(Number(o.opacity) * 100)}% · blur ${String(o.blur)} px · offset ${String(o.x)}, ${String(o.y)} px` : "invalid"
+  }
   if (key === "cameraUrl") return typeof value === "string" && value ? cameraLabelForUrl?.(value) ?? "configured source · name unavailable" : "not bound"
   if (key === "box" || key === "crop") {
     const record = plainRecord(value)
