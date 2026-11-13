@@ -53,6 +53,64 @@ describe("Prepare → AI drafts", () => {
     expect(invoke).not.toHaveBeenCalledWith("ai_draft_delete", expect.anything())
   })
 
+  it("adds a draft after the open service's own items as one undoable step, changing none of them (#252)", async () => {
+    drafts = [draft]
+    useSettingsStore.setState({ mcpEnabled: true })
+    const mine = { id: "x", kind: "slide", slide: { title: "Mine", body: "" }, reference: "Mine", confidence: 1, source: "manual", added_at: 0 }
+    useQueueStore.setState({ items: [mine] as never, headers: [{ id: "p0", type: "phase", name: "Pre-service", at: 0, rule: "manual" }] })
+    useQueueStore.getState().resetHistory()
+    await mount()
+    await act(async () => button("Add to this service").click())
+    const q = useQueueStore.getState()
+    expect(q.items.map((i) => i.reference)).toEqual(["Mine", "Welcome", "Missing hymn: Now Thank We All Our God"])
+    expect(q.headers.map((h) => [h.name, h.at])).toEqual([["Pre-service", 0], ["Main service", 1]])
+    // A plain section: the service keeps its own main phase and start time.
+    expect(q.headers[1]).not.toHaveProperty("role")
+    expect(q.headers[1]).not.toHaveProperty("starts_at")
+    expect(document.body.textContent).not.toContain("Replace them with this draft?")
+    expect(invoke).toHaveBeenCalledWith("ai_draft_mark_opened", expect.objectContaining({ id: draft.id }))
+    q.undo()
+    expect(useQueueStore.getState().items.map((i) => i.reference)).toEqual(["Mine"])
+    expect(useQueueStore.getState().headers.map((h) => h.name)).toEqual(["Pre-service"])
+  })
+
+  it("adds a draft before the service's closing loop, which stays last (#252)", async () => {
+    drafts = [draft]
+    useSettingsStore.setState({ mcpEnabled: true })
+    const slide = (id: string) => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 })
+    useQueueStore.setState({ items: [slide("Opening"), slide("Notices")] as never, headers: [
+      { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" },
+      { id: "post", type: "phase", name: "Post-service loop", at: 1, rule: "loop" },
+    ] })
+    useQueueStore.getState().resetHistory()
+    await mount()
+    await act(async () => button("Add to this service").click())
+    const q = useQueueStore.getState()
+    expect(q.items.map((i) => i.reference)).toEqual(["Opening", "Welcome", "Missing hymn: Now Thank We All Our God", "Notices"])
+    const sorted = [...q.headers].sort((a, b) => a.at - b.at)
+    expect(sorted.map((h) => [h.name, h.at, h.rule])).toEqual([["Main service", 0, "manual"], ["Main service", 1, "manual"], ["Post-service loop", 3, "loop"]])
+    expect(q.headers.filter((h) => h.role === "main")).toHaveLength(1)
+  })
+
+  it("keeps the item on air the same item, and adds after a loop-only service's items (#252)", async () => {
+    drafts = [draft]
+    useSettingsStore.setState({ mcpEnabled: true })
+    const slide = (id: string) => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 })
+    useQueueStore.setState({ items: [slide("Opening"), slide("Notices")] as never, activeIndex: 1, headers: [
+      { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual" },
+      { id: "post", type: "phase", name: "Post-service loop", at: 1, rule: "loop" },
+    ] })
+    await mount()
+    await act(async () => button("Add to this service").click())
+    const q = useQueueStore.getState()
+    expect(q.items[q.activeIndex!]?.reference).toBe("Notices")
+    // A service that is only a loop (signage): the draft goes after its items.
+    useQueueStore.setState({ items: [slide("Loop A"), slide("Loop B")] as never, activeIndex: null, headers: [{ id: "pre", type: "phase", name: "Pre-service loop", at: 0, rule: "loop" }] })
+    await mount()
+    await act(async () => button("Add to this service").click())
+    expect(useQueueStore.getState().items.map((i) => i.reference).slice(0, 2)).toEqual(["Loop A", "Loop B"])
+  })
+
   it("lets people untick items and groups, shows how it differs from the open service, and opens only what is ticked", async () => {
     drafts = [{ ...draft, phases: [{ name: "Main service", role: "main", rule: "manual", starts_at: "10:00", items: [
       { kind: "slide", status: "found", title: "Welcome", planned_minutes: 5 },
