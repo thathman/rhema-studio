@@ -31,12 +31,19 @@ with the approved R and the opening quotation marks). No recolouring (no teal ma
 - The product name in `tauri.conf.json` ("Rhema"): it names `Rhema.app`, its binary path (AI assistants
   are set up with `/Applications/Rhema.app/Contents/MacOS/Rhema --mcp`), the Windows install folder and
   registry key, and the Linux package. The macOS menu bar and app menu say Rhema Studio (`bundleName`).
-- Android packages `com.openbezal.rhema.receiver` and `com.openbezal.rhema.camera`, the `rhema-camera://`
-  link, the companion's `com.openbezal.rhema.companion`.
+- The `rhema-camera://` link and the companion's `com.openbezal.rhema.companion`.
 - Crate and binary names, mDNS service types (`_rhema-tv._tcp`, `_rhema-host._tcp`), the " · Rhema"
   suffix a TV announces and "Rhema · <computer>" a host announces, the `X-Rhema-Key` header, `/rhema/…`
   OSC addresses, HTTP API paths, file formats, environment variables.
 - NDI sender names and ready-made feed names ("Rhema Bible | Full", "Rhema Output"…), OBS input names
   ("Pulpit (Rhema camera)") and output window titles: OBS scenes and captures find them by name.
 
-No company, domain, e-mail or social account is claimed for Rhema Studio until the owner supplies one.
+## Developer and Android packages (owner, 13 Nov 2026)
+
+The developer is **Airix Media — Hendrix Nwaokolo**, shown in Rhema Studio Receiver's code screen and in Rhema
+Studio Cam's About. The Android packages are `com.airixmedia.rhema.receiver` (from Receiver 1.9.0.0) and
+`com.airixmedia.rhema.camera` (from Cam 1.7.0.0). Android treats them as new apps: a TV or phone that had the
+earlier `com.openbezal.rhema.*` build installs the new one beside it, pairs it once, and then uninstalls the old
+one. The original Rhema/OpenBezal MIT credit stays in LICENSE and the notices.
+
+No domain, e-mail or social account is claimed for Rhema Studio until the owner supplies one.

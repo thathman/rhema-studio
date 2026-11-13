@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Rhema Studio Cam (#209, formerly Rhema Camera): a phone's camera, sent to Rhema Studio's camera router over the
-     church network. The package name and the rhema-camera:// link stay, so installed phones update in place. -->
+     church network. Developer: Airix Media — Hendrix Nwaokolo. From 1.7.0.0 the package is com.airixmedia.rhema.camera;
+     earlier builds (com.openbezal.rhema.camera) are a separate app: pair once, then uninstall the old one. The
+     rhema-camera:// link stays. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.openbezal.rhema.camera"
-    android:versionCode="7"
-    android:versionName="1.6.0.0">
+    package="com.airixmedia.rhema.camera"
+    android:versionCode="8"
+    android:versionName="1.7.0.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 

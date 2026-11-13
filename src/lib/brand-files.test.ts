@@ -69,8 +69,8 @@ describe("brand files (owner's pack)", () => {
     expect(read("android-tv/AndroidManifest.xml").toString()).toContain(`android:label="${PRODUCT_NAMES.receiver}"`)
     expect(read("android-camera/AndroidManifest.xml").toString()).toContain(`android:label="${PRODUCT_NAMES.cam}"`)
     // Identifiers do not move: installed apps update in place and saved settings load.
-    expect(read("android-tv/AndroidManifest.xml").toString()).toContain('package="com.openbezal.rhema.receiver"')
-    expect(read("android-camera/AndroidManifest.xml").toString()).toContain('package="com.openbezal.rhema.camera"')
+    expect(read("android-tv/AndroidManifest.xml").toString()).toContain('package="com.airixmedia.rhema.receiver"')
+    expect(read("android-camera/AndroidManifest.xml").toString()).toContain('package="com.airixmedia.rhema.camera"')
     const conf = JSON.parse(read("src-tauri/tauri.conf.json").toString())
     expect(conf.identifier).toBe("com.openbezal.rhema")
     expect(conf.productName).toBe("Rhema")

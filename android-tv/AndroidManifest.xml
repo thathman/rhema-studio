@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Rhema Studio Receiver (#198, formerly Rhema Receiver): a Google TV / Android TV shows a Rhema Studio
-     browser feed, full screen. The package name stays com.openbezal.rhema.receiver so installed TVs update in place. -->
+     browser feed, full screen. Developer: Airix Media — Hendrix Nwaokolo. From 1.9.0.0 the package is
+     com.airixmedia.rhema.receiver; earlier builds (com.openbezal.rhema.receiver) are a separate app: pair once, then
+     uninstall the old one. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.openbezal.rhema.receiver"
-    android:versionCode="14"
-    android:versionName="1.8.0.0">
+    package="com.airixmedia.rhema.receiver"
+    android:versionCode="15"
+    android:versionName="1.9.0.0">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
     <!-- Also all that telling the network about this TV (NSD, _rhema-tv._tcp) needs. -->
