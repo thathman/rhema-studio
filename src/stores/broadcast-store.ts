@@ -1179,7 +1179,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       delete languageOverrides[id]
       set({ languageOverrides })
     }
-    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch || "sceneId" in patch || "stageLayout" in patch || "stageOrientation" in patch || "stageNight" in patch) get().syncBroadcastOutputFor(id)
+    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "ticker" in patch || "shows" in patch || "sceneId" in patch || "stageLayout" in patch || "stageOrientation" in patch || "stageNight" in patch) get().syncBroadcastOutputFor(id)
     // A feed's rule for a lost host or its overscan (#198): its screens get the last frame again with it.
     else if ("hostLost" in patch || "overscan" in patch) resendLast(id)
   },
