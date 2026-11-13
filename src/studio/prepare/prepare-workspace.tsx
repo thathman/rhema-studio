@@ -302,10 +302,11 @@ export function PrepareWorkspace() {
               <RundownTools />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-1.5">
-              <div role="group" aria-label="Running order view" className="flex items-center gap-1">
+              {/* Simple list vs Grouped by phase only means something once there are phases (UX audit P7: fewer controls). */}
+              {phaseCount > 0 ? <div role="group" aria-label="Running order view" className="flex items-center gap-1">
                 <Button type="button" size="sm" variant={rundownView === "simple" ? "secondary" : "ghost"} aria-pressed={rundownView === "simple"} onClick={() => changeRundownView("simple")} className="h-11 min-w-[5.5rem] px-2 text-[0.6875rem]">Simple list</Button>
                 <Button type="button" size="sm" variant={rundownView === "grouped" ? "secondary" : "ghost"} aria-pressed={rundownView === "grouped"} onClick={() => changeRundownView("grouped")} className="h-11 min-w-[5.5rem] px-2 text-[0.6875rem]">Grouped by phase</Button>
-              </div>
+              </div> : <span />}
               <div className="flex items-center gap-1.5">
                 {phaseCount > 0 && (
                   <DropdownMenu>
