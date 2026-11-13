@@ -62,6 +62,7 @@ import { eventTimes } from "@/lib/journal"
 import { countdownLine, countdownTarget } from "@/lib/countdown"
 import { CountdownSelect } from "@/studio/production/countdown-select"
 import { AutomaticReminders } from "@/studio/production/automatic-reminders"
+import { useFixedStartAuto } from "@/stores/fixed-start-auto-store"
 
 type Tab = ProductionTab
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
@@ -1031,6 +1032,7 @@ function EventClockBar() {
           <option value="screens">Follows the screens</option>
           <option value="own">I start each event</option>
         </select>
+        <FixedStartsByClock />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" disabled={at <= 0} onClick={() => useEventClock.getState().previous()}>Back one</Button>
@@ -1039,6 +1041,22 @@ function EventClockBar() {
         <span className="text-muted-foreground">{mode === "screens" ? "An event starts when its first moment goes on air; later moments keep the same event time." : "Events start only from here; showing content does not move the clock."} The screens never change from here.</span>
       </div>
     </div>
+  )
+}
+
+/**
+ * Fixed starts kept by the clock (#196): armed here, an event with a fixed start begins on the
+ * event clock at its time (within two minutes, else not at all). It never changes a screen; it
+ * waits in rehearsal and on a Hold, and is not kept when Rhema Studio restarts.
+ */
+function FixedStartsByClock() {
+  const armed = useFixedStartAuto((s) => s.armed)
+  const me = useSettingsStore((s) => s.operatorName.trim()) || "Main computer"
+  return (
+    <label className="flex items-center gap-1.5" title="An event with a fixed start begins on the event clock at its time (within two minutes). Screens never change from here. Not kept after a restart.">
+      <input type="checkbox" checked={!!armed} onChange={(e) => (e.target.checked ? useFixedStartAuto.getState().arm(me) : useFixedStartAuto.getState().disarm(me))} />
+      Start fixed-start events at their time
+    </label>
   )
 }
 
