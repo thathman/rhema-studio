@@ -7680,7 +7680,7 @@ mod tests {
         r.observe(&state(&["new", "a", "b"], serde_json::json!(true), "Cut"));
         assert_eq!((r.get("queue"), r.get("obs:record"), r.get("obs:transition")), (Some(q + 1), Some(rec + 1), Some(tr + 1)));
         use crate::command::{ObsRecordIn, QueueIn, QueueKind, RecordAction};
-        assert_eq!(revision_part(&RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Song, value: "x".into() })).as_deref(), Some("queue"));
+        assert_eq!(revision_part(&RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Song, value: "x".into(), event: None })).as_deref(), Some("queue"));
         assert_eq!(revision_part(&RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Marker, label: None })).as_deref(), Some("obs:record"));
         assert_eq!(revision_part(&RemoteCommand::ObsTransition("Cut".into())).as_deref(), Some("obs:transition"));
     }

@@ -236,6 +236,20 @@ describe("round two commands on the main computer", () => {
     root.unmount()
   })
 
+  it("a request queued into an event of the plan goes at that event's end (#409)", async () => {
+    const slide = (id: string) => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 })
+    useQueueStore.setState({ items: [slide("Welcome"), slide("Notes")] as never, activeIndex: null, addTarget: null, headers: [
+      { id: "opening", type: "group", name: "Opening", at: 0, event: { schema_version: 1 } },
+      { id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1 } },
+    ] })
+    useSongStore.setState({ lookup: vi.fn(async () => [summary("song-1", "Amazing Grace")]) } as never)
+    const root = await host()
+    await fire("remote:queue_request", { kind: "song", value: "Amazing Grace", event: "opening", by: "Worship desk" })
+    await vi.waitFor(() => expect(useQueueStore.getState().items.map((i) => i.reference)).toEqual(["Welcome", "Amazing Grace", "Notes"]))
+    expect(useQueueStore.getState().headers.find((h) => h.id === "sermon")?.at).toBe(2)
+    root.unmount()
+  })
+
   it("the OBS director's recording and transition run on this computer's OBS, never in rehearsal", async () => {
     const startRecording = vi.fn(async () => {})
     const stopRecording = vi.fn(async () => {})
