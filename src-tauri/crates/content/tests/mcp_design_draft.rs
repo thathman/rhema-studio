@@ -273,3 +273,43 @@ fn only_a_present_library_picture_can_be_used() {
         assert!(library_picture(&db, &dir.join("media"), &escaped.id).unwrap_err().contains("missing from the media folder"));
     }
 }
+
+#[test]
+fn an_assistant_revises_only_its_own_untouched_unversioned_draft_at_the_revision_it_read() {
+    let dir = temp("revise");
+    let db = ContentDb::open(&dir.join("studio.db")).unwrap();
+    let doc = || try_build(&proposal(), false).unwrap().document;
+    let input = |title: &str| DesignInput { title: title.into(), kind: "design".into(), document: doc() };
+    let refused = |r: rhema_content::Result<rhema_content::DesignDocument>| match r {
+        Err(rhema_content::ContentError::Refused { code, .. }) => code,
+        other => panic!("expected a refusal, got {other:?}"),
+    };
+
+    // Its own draft: revised at the revision it read, recorded as the assistant's.
+    let draft = db.create_assistant_design(&input("First idea"), "Claude").unwrap();
+    assert!(db.assistant_may_revise_design(&draft.id).unwrap());
+    let revised = db.revise_assistant_design(&draft.id, 1, &input("Second idea"), "Claude").unwrap();
+    assert_eq!((revised.revision, revised.title.as_str(), revised.latest_version), (2, "Second idea", None));
+    // An old revision is a conflict, never an overwrite.
+    assert!(matches!(db.revise_assistant_design(&draft.id, 1, &input("Late"), "Claude"), Err(rhema_content::ContentError::Conflict { expected: 1, actual: 2 })));
+    // Again straight away: too soon (a person editing it gets room to save).
+    let too_soon = match db.revise_assistant_design(&draft.id, 2, &input("Third"), "Claude") {
+        Err(rhema_content::ContentError::Refused { code, .. }) => code,
+        other => panic!("expected too_soon, got {other:?}"),
+    };
+    assert_eq!(too_soon, "too_soon");
+
+    // A person saves it: it is theirs now.
+    db.save_design_draft(&draft.id, 2, &input("Ada's edit")).unwrap();
+    assert!(!db.assistant_may_revise_design(&draft.id).unwrap());
+    assert_eq!(refused(db.revise_assistant_design(&draft.id, 3, &input("Again"), "Claude")), "not_assistant_draft");
+    assert_eq!(db.get_design(&draft.id).unwrap().unwrap().title, "Ada's edit");
+
+    // A version made: refused. A design made in the app: refused.
+    let versioned = db.create_assistant_design(&input("Versioned"), "Claude").unwrap();
+    db.create_design_version(&versioned.id, 1, None, "Ada").unwrap();
+    assert_eq!(refused(db.revise_assistant_design(&versioned.id, 1, &input("x"), "Claude")), "not_assistant_draft");
+    let theirs = db.create_design(&input("Sunday look")).unwrap();
+    assert!(!db.assistant_may_revise_design(&theirs.id).unwrap());
+    assert_eq!(refused(db.revise_assistant_design(&theirs.id, 1, &input("x"), "Claude")), "not_assistant_draft");
+}

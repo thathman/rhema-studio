@@ -6,7 +6,7 @@
 use serde_json::{json, Value};
 
 use rhema_content::proposal::{self, Issue};
-use rhema_content::{ContentDb, DesignInput};
+use rhema_content::{ContentDb, ContentError, DesignInput};
 
 use super::{text, tool_error, Server};
 
@@ -17,6 +17,8 @@ pub(super) fn tools() -> Vec<Value> {
         json!({ "name": "rhema_get_design_capabilities", "description": "What a design proposed here may hold, so Rhema's screens draw it exactly as the Design editor shows it: 1920×1080 pages of text (both service languages), rectangles and ellipses (solid or linear-gradient fills) and pictures from the church's media library by id, with the limits and what is refused and why.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro }),
         json!({ "name": "rhema_list_designs", "description": "The church's designs in Rhema Studio → Design (newest change first): id, title, kind, draft revision and latest saved version. No documents.", "inputSchema": { "type": "object", "properties": { "query": { "type": "string", "description": "words in the title" }, "limit": { "type": "integer", "minimum": 1, "maximum": super::MAX_LIST } } }, "annotations": ro }),
         json!({ "name": "rhema_validate_design_draft", "description": "Check a proposed design without saving it: every page and layer, the fills and fonts, both languages' words and that each picture is in the media library. Returns errors (with where each is), warnings and what would be made.", "inputSchema": { "type": "object", "properties": { "design": design }, "required": ["design"] }, "annotations": ro }),
+        json!({ "name": "rhema_get_design", "description": "One design from rhema_list_designs: its title, kind, draft revision, latest version, whether an assistant may still revise it, and the editor's document (pages and layers as Rhema stores them).", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] }, "annotations": ro }),
+        json!({ "name": "rhema_update_design_draft", "description": "Replace a draft an assistant made with a revised proposal (same shape and checks as rhema_create_design_draft). Only a draft an assistant made over MCP that no person has saved since and that has no version yet, and only at the revision you read (else it is refused: read it again). Never a version, an approval, a service or a screen.", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 }, "design": design }, "required": ["id", "revision", "design"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false } }),
         json!({ "name": "rhema_create_design_draft", "description": "Save a checked proposed design as a NEW draft in Rhema Studio → Design → My Designs, for people to open, edit, save and version themselves. It never changes an existing design, makes a version, approves anything, touches a service or puts anything on screen. Fails with the same errors as the check.", "inputSchema": { "type": "object", "properties": { "design": design }, "required": ["design"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false } }),
     ]
 }
@@ -39,12 +41,13 @@ fn capabilities() -> Value {
             "pictures by address (web, file or data URLs): only the media library, by id",
             "crops and masks: people add them in the Design editor",
             "control and text-direction characters in words",
-            "ids, revisions, versions, pins, approvals, outputs or services: an assistant only makes a new draft",
+            "ids, revisions, versions, pins, approvals, outputs or services in a proposal: an assistant only makes or revises its own drafts",
         ],
         "rules": [
             "A draft is saved in Rhema Studio → Design → My Designs. People open it, edit it, save it and make a version; only a version can be used in a service, and only an approved service reaches the screens.",
             "Nothing here can change an existing design, a service or a screen.",
             "Check with rhema_validate_design_draft, then save with rhema_create_design_draft.",
+            "To change a draft you made, read it with rhema_get_design and send the whole revised proposal to rhema_update_design_draft with the revision you read. Once a person saves it or makes a version, it is theirs.",
         ],
     })
 }
@@ -70,6 +73,59 @@ fn now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(0))
 }
 
+/// Keys that hold an address of a file or device on this computer or network.
+const ADDRESS_KEYS: [&str; 9] = ["src", "imageUrl", "videoUrl", "cameraUrl", "url", "href", "mediaFile", "file", "path"];
+
+/// A string that is a local or embedded address, wherever it appears.
+fn is_address(t: &str) -> bool {
+    let l = t.trim_start().to_ascii_lowercase();
+    l.starts_with("asset:") || l.starts_with("http://asset.localhost") || l.starts_with("https://asset.localhost") || l.starts_with("file:") || l.starts_with("blob:") || l.starts_with("data:")
+        || l.starts_with("\\\\") || l.starts_with("~/")
+        // An absolute path: a slash-led word with another slash in it ("/ Pastor" is words, kept).
+        || (l.starts_with('/') && l.split_whitespace().next().is_some_and(|w| w[1..].contains('/')))
+        || private_host(&l)
+        || (l.len() > 2 && l.as_bytes()[1] == b':' && l.as_bytes()[0].is_ascii_alphabetic() && matches!(l.as_bytes()[2], b'\\' | b'/'))
+        || l.contains("url(")
+}
+
+/// A web address on this computer or the church's network (loopback, private or link-local).
+fn private_host(l: &str) -> bool {
+    let Some(rest) = l.strip_prefix("http://").or_else(|| l.strip_prefix("https://")).or_else(|| l.strip_prefix("rtsp://")).or_else(|| l.strip_prefix("rtsps://")).or_else(|| l.strip_prefix("srt://")).or_else(|| l.strip_prefix("ws://")).or_else(|| l.strip_prefix("wss://")) else { return false };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = host.rsplit('@').next().unwrap_or(host);
+    let host = if host.starts_with('[') { host.split(']').next().unwrap_or(host).trim_start_matches('[') } else { host.split(':').next().unwrap_or(host) };
+    // The address is lowercased already; its last label says whether it is on this network.
+    if matches!(host.rsplit('.').next(), Some("localhost" | "local")) { return true }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified(),
+        Ok(std::net::IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unspecified() || (ip.segments()[0] & 0xfe00) == 0xfc00 || (ip.segments()[0] & 0xffc0) == 0xfe80,
+        Err(_) => false,
+    }
+}
+
+/// The document with every local file address taken out (pictures keep their media id): this
+/// computer's folders and devices are never handed to an assistant. Words in text layers stay.
+fn without_local_addresses(mut v: Value) -> Value {
+    fn walk(v: &mut Value) {
+        match v {
+            Value::Object(map) => {
+                map.retain(|k, x| !x.as_str().is_some_and(|t| ADDRESS_KEYS.contains(&k.as_str()) || is_address(t)));
+                map.values_mut().for_each(walk);
+            }
+            Value::Array(list) => {
+                list.retain(|x| !x.as_str().is_some_and(is_address));
+                list.iter_mut().for_each(walk);
+            }
+            _ => {}
+        }
+    }
+    walk(&mut v);
+    v
+}
+
+/// The most of a design's document handed to an assistant (it is sent twice: as text and structured).
+const MAX_DOCUMENT_BYTES: usize = 256 * 1024;
+
 /// The design tools' answers; None for a name that is not one of them.
 pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
     Some(match name {
@@ -82,7 +138,21 @@ pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
                 Err(e) => tool_error(&format!("could not read the designs: {e}")),
             }
         }
-        "rhema_validate_design_draft" | "rhema_create_design_draft" => {
+        "rhema_get_design" => {
+            let Some(c) = &s.content else { return Some(tool_error(s.problem.as_deref().unwrap_or("no designs"))) };
+            let Some(id) = a.get("id").and_then(Value::as_str) else { return Some(tool_error("give the design's id (from rhema_list_designs)")) };
+            match c.get_design(id) {
+                Ok(Some(d)) => {
+                    let may_revise = c.assistant_may_revise_design(&d.id).unwrap_or(false);
+                    let doc = without_local_addresses(d.document);
+                    let document = if doc.to_string().len() > MAX_DOCUMENT_BYTES { json!({ "omitted": "This design is too large to read here; open it in Rhema Studio → Design → My Designs." }) } else { doc };
+                    text(&json!({ "id": d.id, "title": d.title, "kind": d.kind, "revision": d.revision, "latestVersion": d.latest_version, "updatedAt": d.updated_at, "archived": d.archived_at.is_some(), "assistantMayRevise": may_revise, "document": document }))
+                }
+                Ok(None) => tool_error("there is no design with that id"),
+                Err(e) => tool_error(&format!("could not read the design: {e}")),
+            }
+        }
+        "rhema_validate_design_draft" | "rhema_create_design_draft" | "rhema_update_design_draft" => {
             let (Some(c), Some(dir)) = (&s.content, s.dir.as_deref()) else { return Some(tool_error(s.problem.as_deref().unwrap_or("no Rhema data on this computer yet"))) };
             // Absolute, as the app's own media folder is: a relative `--data` would store an address the editor cannot load.
             let media = std::path::absolute(dir.join("media")).unwrap_or_else(|_| dir.join("media"));
@@ -105,8 +175,26 @@ pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
             if name == "rhema_validate_design_draft" {
                 return Some(text(&report));
             }
+            let input = DesignInput { title: built.title, kind: built.kind, document: built.document };
+            if name == "rhema_update_design_draft" {
+                let (Some(id), Some(revision)) = (a.get("id").and_then(Value::as_str), a.get("revision").and_then(Value::as_i64)) else {
+                    return Some(tool_error("give the draft's id and the revision you read (rhema_get_design)"));
+                };
+                let saved = ContentDb::open_existing(&dir.join("studio.db")).and_then(|db| db.revise_assistant_design(id, revision, &input, &assistant(s)));
+                return Some(match saved {
+                    Ok(d) => {
+                        eprintln!("[rhema-mcp] design draft {} revised by {}", d.id, assistant(s));
+                        report["designId"] = json!(d.id);
+                        report["revision"] = json!(d.revision);
+                        report["next"] = json!("Revised in Rhema Studio → Design → My Designs. It is still a draft: people open it, edit and save it, and make a version before any service can use it.");
+                        text(&report)
+                    }
+                    Err(ContentError::Conflict { actual, .. }) => tool_error(&format!("the draft changed since you read it (now revision {actual}): read it again with rhema_get_design")),
+                    Err(e) => tool_error(&format!("the draft was not revised: {e}")),
+                });
+            }
             // A handle of its own for this one save: the server otherwise only reads.
-            let saved = ContentDb::open_existing(&dir.join("studio.db")).and_then(|db| db.create_assistant_design(&DesignInput { title: built.title, kind: built.kind, document: built.document }, &assistant(s)));
+            let saved = ContentDb::open_existing(&dir.join("studio.db")).and_then(|db| db.create_assistant_design(&input, &assistant(s)));
             match saved {
                 Ok(d) => {
                     eprintln!("[rhema-mcp] design draft {} created by {}", d.id, assistant(s));
@@ -120,4 +208,29 @@ pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
         }
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_addresses_never_reach_an_assistant_but_words_do() {
+        let doc = json!({
+            "bindings": { "p": { "kind": "picture", "mediaId": "m1", "imageUrl": "asset://localhost/%2FUsers%2Fa%2Fx.png" }, "c": { "kind": "camera", "cameraUrl": "http://192.168.3.90:8889/cam" } },
+            "scene": { "nodes": [
+                { "type": "text", "text": "/ Pastor Ade", "fill": "url(file:///Users/a/x.png)" },
+                { "type": "image", "srcs": ["C:\\Users\\a\\x.png", "\\\\server\\share\\y.png", "data:image/png;base64,AAAA", "keep me"] },
+                { "type": "image", "src": "http://asset.localhost/C%3A%5Cx.png", "note": "/Users/a/secret.png", "tmp": "/var/folders/x/y.png", "lan": "rtsp://10.0.0.5:8554/cam", "v6": "http://[fe80::1]/x" },
+                { "type": "text", "text": "Visit https://example.org/give" }
+            ] }
+        });
+        let out = without_local_addresses(doc).to_string();
+        for leak in ["asset", "192.168", "file:", "Users", "server", "data:image", "/var/", "10.0.0.5", "fe80"] {
+            assert!(!out.contains(leak), "{leak} in {out}");
+        }
+        for kept in ["/ Pastor Ade", "keep me", "m1", "https://example.org/give"] {
+            assert!(out.contains(kept), "{kept} kept in {out}");
+        }
+    }
 }

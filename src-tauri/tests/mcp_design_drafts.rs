@@ -87,7 +87,7 @@ fn an_opted_in_assistant_makes_an_editable_design_draft_and_nothing_else() {
     let init = mcp.rpc("initialize", json!({ "protocolVersion": "2025-06-18", "clientInfo": { "name": "E2E\u{202E} Assistant", "version": "9.1\n" } }));
     assert_eq!(init["result"]["serverInfo"]["name"], "rhema-studio");
     let names: Vec<String> = mcp.rpc("tools/list", json!({}))["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
-    for n in ["rhema_get_design_capabilities", "rhema_list_designs", "rhema_validate_design_draft", "rhema_create_design_draft"] {
+    for n in ["rhema_get_design_capabilities", "rhema_list_designs", "rhema_validate_design_draft", "rhema_create_design_draft", "rhema_get_design", "rhema_update_design_draft"] {
         assert!(names.iter().any(|x| x == n), "{n} listed");
     }
 
@@ -145,6 +145,25 @@ fn an_opted_in_assistant_makes_an_editable_design_draft_and_nothing_else() {
     assert_eq!((after.revision, after.latest_version), (theirs.revision, Some(1)));
     assert_eq!(app.get_program(&service.id).unwrap().unwrap().program.revision, service.revision);
     assert_eq!(app.list_design_versions(&id).unwrap().len(), 0);
+
+    // Read back and revised by the same assistant, at the revision it read; never a local address.
+    let got = mcp.tool("rhema_get_design", json!({ "id": id }));
+    assert_eq!((got["structuredContent"]["revision"].as_i64(), got["structuredContent"]["assistantMayRevise"].as_bool()), (Some(1), Some(true)));
+    for local in ["asset:", "asset.localhost", "file:", dir.to_str().unwrap()] {
+        assert!(!got.to_string().contains(local), "no local address handed out ({local})");
+    }
+    let mut second = proposal(&pic.id);
+    second["title"] = json!("Harvest, revised");
+    let stale = mcp.tool("rhema_update_design_draft", json!({ "id": id, "revision": 7, "design": second }));
+    assert!(stale["content"][0]["text"].as_str().unwrap().contains("read it again"), "{stale}");
+    let revised = mcp.tool("rhema_update_design_draft", json!({ "id": id, "revision": 1, "design": second }));
+    assert_eq!(revised["isError"], false, "{revised}");
+    assert_eq!((app.get_design(&id).unwrap().unwrap().revision, app.get_design(&id).unwrap().unwrap().title.as_str()), (2, "Harvest, revised"));
+    // A design made in the app is never revised by an assistant.
+    let theirs_now = app.get_design(&theirs.id).unwrap().unwrap();
+    let not_theirs = mcp.tool("rhema_update_design_draft", json!({ "id": theirs.id, "revision": theirs_now.revision, "design": proposal(&pic.id) }));
+    assert_eq!(not_theirs["isError"], true);
+    assert_eq!(app.get_design(&theirs.id).unwrap().unwrap().revision, theirs_now.revision);
 
     // A database a newer Rhema wrote: this server does not write to it.
     drop(app);

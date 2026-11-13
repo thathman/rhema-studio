@@ -150,8 +150,8 @@ function deskLayer(raw: unknown, had: SceneLayer | undefined, cameras: Set<strin
     ...(rotation !== undefined ? { rotation } : {}),
   }
   // Media is the host's: a layer keeps its own picture, video and held copy, a new one has none.
-  // So is how its text widens (set only by the design editor's save).
-  if (had && had.kind === kind) for (const k of ["mediaId", "mediaFile", "imageDraw", "textWiden", ...HOST_ONLY] as const) if (had[k] !== undefined) Object.assign(layer, { [k]: had[k] })
+  // So is how its text widens and a shape's outline and corners (set only by the design editor's save, #448).
+  if (had && had.kind === kind) for (const k of ["mediaId", "mediaFile", "imageDraw", "textWiden", "outline", "corner", ...HOST_ONLY] as const) if (had[k] !== undefined) Object.assign(layer, { [k]: had[k] })
   return layer
 }
 
