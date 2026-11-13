@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from "react"
+import { invoke } from "@tauri-apps/api/core"
 import { ImageIcon, MessageSquareIcon, MusicIcon, PinIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
 import { canDeleteComment, cleanComments, commentDeleted, commentKey, MAX_COMMENTS, MAX_COMMENT_HISTORY, tombstoneComment } from "@/lib/comments"
 import { itemAssignees, knownPeople, MAX_ASSIGNEES, withAssignees } from "@/lib/assignees"
@@ -12,9 +13,10 @@ import { useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useSlideStore } from "@/stores/slide-store"
+import { copyAtSourceRevision } from "@/studio/library/slide-items"
 import { useShellStore } from "@/studio/shell-store"
 
-import { CUE_TRIGGERS, GO_LIVE_CUES, ITEM_CUE_DOES, isAudioItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type AudioQueueItem, type CueQueueItem, type CueTrigger, type GoLiveCue, type ImageQueueItem, type ItemCue, type ItemCueDo, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
+import { CUE_TRIGGERS, GO_LIVE_CUES, ITEM_CUE_DOES, isAudioItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type AudioQueueItem, type CueQueueItem, type CueTrigger, type GoLiveCue, type ImageQueueItem, type ItemCue, type ItemCueDo, type QueueItem, type ReusableSlide, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
 import { CUE_DO_LABEL, cueTakesText, MAX_ITEM_CUES, TRIGGER_LABEL } from "@/lib/item-cues"
 import { useSongApproval, useSongPins } from "@/stores/song-pins-store"
 import { CUE_ACTIONS, takeImpact } from "@/lib/cues"
@@ -375,6 +377,33 @@ export function NoteEditor({ item }: { item: QueueItem }) {
 
 /** Prepare-only: edit a custom slide in place. The preview follows every keystroke. */
 
+/**
+ * A service copy whose reusable source has a newer saved version (#395): say so, and offer to update
+ * this copy only. Looked up once each time this copy is opened, from the whole library (not the
+ * Library's search results), so a source edited elsewhere shows on the next open.
+ */
+function SourceUpdate({ item }: { item: SlideQueueItem }) {
+  const id = item.slide.source_asset_id
+  const [source, setSource] = useState<ReusableSlide | null>(null)
+  useEffect(() => {
+    let live = true
+    // ponytail: the whole list once per open; a get-by-id command if libraries grow past a few thousand.
+    void invoke<ReusableSlide[]>("content_list_reusable_slides", { query: null, limit: 5000 })
+      .then((slides) => { if (live) setSource(slides.find((slide) => slide.id === id) ?? null) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [id])
+  if (!source || source.revision <= (item.slide.source_revision ?? 0)) return null
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5" role="status">
+      <p className="text-[0.6875rem]">The reusable source was changed since this copy was made (version {source.revision}; this copy is {item.slide.source_revision ?? "older"}). Updating replaces this copy’s words with the source’s; Undo brings them back.</p>
+      <Button size="xs" variant="outline" onClick={() =>
+        useQueueStore.getState().updateItem(item.id, (i) => (isSlideItem(i) ? copyAtSourceRevision(i, source, useMediaStore.getState().assets) : i))
+      }>Update this copy</Button>
+    </div>
+  )
+}
+
 export function CustomSlideEditor({ item }: { item: SlideQueueItem }) {
   const update = (patch: Partial<SlideQueueItem["slide"]>) =>
     useQueueStore.getState().updateItem(item.id, (i) => {
@@ -391,6 +420,7 @@ export function CustomSlideEditor({ item }: { item: SlideQueueItem }) {
           useShellStore.getState().openLibrarySection("slides", prepareLibraryReturnForMoment(item.id))
         }}>Edit reusable source</Button>
       </div>}
+      {item.slide.source_asset_id && <SourceUpdate item={item} />}
       <Input aria-label="Slide title" maxLength={200} value={item.slide.title} placeholder="Title" className="h-8 text-sm" onChange={(e) => update({ title: e.target.value })} />
       <Textarea
         aria-label="Slide text"
