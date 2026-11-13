@@ -255,6 +255,17 @@ describe("Prepare never takes anything live (#299)", () => {
     goLive.forEach((s) => s.mockRestore())
   })
 
+  it("shows Save as a service from the first unsaved item, opening the name form without going live (UX audit slice 8)", async () => {
+    useQueueStore.setState({ items: [slide("Welcome")], headers: [], activeIndex: null })
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null })
+    const el = await renderPrepare()
+    const save = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("Save as a service"))!
+    expect(save).toBeTruthy()
+    await act(async () => save.click())
+    expect(document.querySelector("#svc-title")).not.toBeNull()
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+  })
+
   it("Open Live opens the live console without showing anything", async () => {
     useQueueStore.setState({ items: [slide("Welcome")], headers: [], activeIndex: null })
     useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null })

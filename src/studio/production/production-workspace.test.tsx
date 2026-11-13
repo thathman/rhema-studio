@@ -86,8 +86,9 @@ describe("Production control", () => {
     document.body.appendChild(el)
     await act(async () => mount(el, true))
     expect(el.querySelector('[role="tablist"][aria-label="Live operation tools"]')).not.toBeNull()
-    expect(el.textContent).toContain("Use the service timer in Live’s top bar")
-    expect(el.textContent).toContain("Manage them here; the main service timer stays in Live’s top bar.")
+    // The docked Timer tool is the one place to set the service clock (UX audit slice 4); the top-bar chip only opens it.
+    expect(el.querySelector("#timer-minutes")).not.toBeNull()
+    expect(el.textContent).toContain("Manage them here; the main service timer is above.")
     expect(el.textContent).toContain("Communion prep")
     const startAuxTimer = el.querySelector<HTMLButtonElement>('[aria-label="Start Communion prep"]')!
     await act(async () => startAuxTimer.click())
@@ -95,7 +96,7 @@ describe("Production control", () => {
     const pauseAuxTimer = el.querySelector<HTMLButtonElement>('[aria-label="Pause Communion prep"]')!
     await act(async () => pauseAuxTimer.click())
     expect(useAuxTimers.getState().timers[0]?.timer.startedAt).toBeNull()
-    expect([...el.querySelectorAll("button")].some((button) => /^(Start|Pause|Resume|Reset)$/.test(button.textContent?.trim() ?? ""))).toBe(false)
+    expect([...el.querySelectorAll("button")].filter((button) => button.textContent?.trim() === "Start")).toHaveLength(1)
     // #808 R9: Live's top bar shows the service clock, so the docked Timekeeper has no second readout.
     expect(el.querySelector('[aria-label="Service timing"]')).not.toBeNull()
     expect(el.querySelector('[aria-label="Service timing"] [role="timer"]')).toBeNull()

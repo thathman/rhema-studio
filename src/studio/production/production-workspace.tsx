@@ -45,7 +45,7 @@ import { useMediaStore } from "@/stores/media-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
 import { useReadiness } from "@/studio/use-readiness"
-import { HoldControl } from "@/studio/present/service-timer"
+import { HoldControl, ServiceTimerControls } from "@/studio/present/service-timer"
 import { AuxTimersPanel } from "@/studio/present/aux-timers"
 import { TickerRow } from "@/studio/present/ticker"
 import { timeChangeWords, useTimeChange } from "@/stores/time-change-store"
@@ -183,7 +183,7 @@ function Timekeeper({ embedded = false }: { embedded?: boolean }) {
           ))}
         </dl>
         {embedded ? (
-          <p className="text-xs text-muted-foreground">Use the service timer in Live’s top bar to see, start, adjust, hold or reset this clock.</p>
+          <ServiceTimerControls />
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => (running ? useTimerStore.getState().pause() : useTimerStore.getState().start())}>{running ? <><PauseIcon /> Pause</> : <><PlayIcon /> Start</>}</Button>
@@ -226,7 +226,7 @@ function Timekeeper({ embedded = false }: { embedded?: boolean }) {
       </Card>
       <CountdownCard />
       <Card kicker="Independent" title="Other timers">
-        {embedded && <p className="text-xs text-muted-foreground">These countdowns run separately from the service clock. Manage them here; the main service timer stays in Live’s top bar.</p>}
+        {embedded && <p className="text-xs text-muted-foreground">These countdowns run separately from the service clock. Manage them here; the main service timer is above.</p>}
         <AuxTimersPanel />
       </Card>
       <AutomaticReminders />

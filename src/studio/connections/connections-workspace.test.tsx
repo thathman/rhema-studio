@@ -71,6 +71,11 @@ describe("Connections hub (#401)", () => {
     expect(host.textContent).toContain("OBS scenes on Live")
   })
 
+  it("is where hosting is set up: the Host the service card sits here (UX audit slice 4)", async () => {
+    await mount()
+    expect(host.querySelector('[aria-label="Host the service"]')?.textContent).toContain("Host the service")
+  })
+
   it("has one Pair a device entry, and each explanation tile points to it (#861)", async () => {
     await mount()
     const buttons = [...host.querySelectorAll("button")].map((button) => button.textContent)
@@ -276,7 +281,8 @@ describe("Connections hub (#401)", () => {
     })
     await mount()
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
-    const stageOf = (name: string) => [...host.querySelectorAll("li")].find((li) => li.textContent?.includes(name))?.querySelector('[aria-label^="Stage:"]')?.getAttribute("aria-label")
+    // Only device rows carry a stage; the Host card's paired-operators list names the same devices.
+    const stageOf = (name: string) => [...host.querySelectorAll("li")].find((li) => li.textContent?.includes(name) && li.querySelector('[aria-label^="Stage:"]'))?.querySelector('[aria-label^="Stage:"]')?.getAttribute("aria-label")
     expect(stageOf("Sanctuary TV")).toBe("Stage: Ready")
     expect(stageOf("Foyer TV")).toBe("Stage: Assigned. Next: Check the TV is on and on the church network")
     // On the feed's shared link: no key of its own, so not Paired, and the fix is said.
