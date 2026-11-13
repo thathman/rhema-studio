@@ -273,6 +273,8 @@ export function PresentWorkspace() {
               onClick={openOutputs}
               title="Open outputs"
             />
+            {/* The recorder is a pill in the status bar (UX audit slice 3); its controls open under it. */}
+            <RecorderDock />
           </div>
         </div>
         <div
@@ -419,7 +421,6 @@ function LiveConsoleSurface({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-0.5 [@media(max-height:860px)]:pt-1">
     <PhaseStrip />
-    <RecorderDock />
     <div className={`grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] ${bottomRow} gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2`}>
       <section className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken ${emptyRundown ? "row-span-1 h-fit self-start" : "row-span-3"}`} data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">

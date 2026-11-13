@@ -436,7 +436,7 @@ export function RecorderDock() {
 
   return (
     <section
-      className="shrink-0 rounded-lg border border-border bg-card px-3 py-2"
+      className="relative flex min-h-8 min-w-0 max-w-full flex-wrap items-center rounded-2xl border border-border bg-card px-3 py-0.5"
       aria-label="Rhema recording dock"
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
@@ -511,7 +511,8 @@ export function RecorderDock() {
               Hide recording controls
             </span>
           </summary>
-          <div className="mt-2 grid gap-3 border-t border-border pt-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(14rem,1fr)_auto] lg:items-end">
+          {/* Opens under the pill like a popover; a native <details>, so the controls stay in the page (and keyboard order) while closed. */}
+          <div className="absolute top-full right-0 z-40 mt-2 grid w-[min(56rem,calc(100vw-2rem))] gap-3 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(14rem,1fr)_auto] lg:items-end">
             <label className="grid gap-1 text-xs font-medium">
               Congregation screen
               <select
@@ -803,22 +804,22 @@ export function RecorderDock() {
         </details>
       </div>
       {statusError && (
-        <p role="alert" className="mt-1 text-xs text-destructive">
+        <p role="alert" className="basis-full pb-1 text-xs text-destructive">
           {statusError}
         </p>
       )}
       {actionError && (
-        <p role="alert" className="mt-1 text-xs text-destructive">
+        <p role="alert" className="basis-full pb-1 text-xs text-destructive">
           {actionError}
         </p>
       )}
       {status?.problem && (
-        <p role="alert" className="mt-1 text-xs text-amber-800">
+        <p role="alert" className="basis-full pb-1 text-xs text-amber-800">
           {status.problem.message}
         </p>
       )}
       {rehearsal && active && (
-        <p role="status" className="mt-1 text-xs text-amber-800">
+        <p role="status" className="basis-full pb-1 text-xs text-amber-800">
           Private rehearsal is on. This recording remains pinned to the actual
           congregation screen; rehearsal Preview is not captured.
         </p>
@@ -827,7 +828,7 @@ export function RecorderDock() {
         status.video.lastFrameAgoMs !== null &&
         status.video.lastFrameAgoMs > 5000 &&
         !status.problem && (
-          <p role="alert" className="mt-1 text-xs text-amber-800">
+          <p role="alert" className="basis-full pb-1 text-xs text-amber-800">
             The selected screen has not sent a recent picture. Live remains
             independent; check the output window.
           </p>
