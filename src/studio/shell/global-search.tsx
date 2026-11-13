@@ -136,7 +136,7 @@ export function GlobalSearch() {
                 if (inLive) return presentActions.previewItem(it)
                 useShellStore.getState().openInPrepare(it.id)
               })}>
-                {itemIcon(it)} <span className="truncate">{eventOf.has(it.id) && <span className="text-muted-foreground">{eventOf.get(it.id)} · </span>}{it.reference}</span>
+                {itemIcon(it)} <span className="truncate">{eventOf.get(it.id) && <span className="text-muted-foreground">{eventOf.get(it.id)} · </span>}{it.reference}</span>
                 <span className="ml-auto text-xs text-muted-foreground">{inLive ? "Live preview" : "open in Prepare"}</span>
               </CommandItem>
             ))}

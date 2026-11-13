@@ -181,6 +181,12 @@ describe("Prepare movement keeps the plan separate from Live", () => {
     expect(document.activeElement?.textContent).toContain("Response")
     q().undo()
     expect(ids()).toEqual(["Prayer", "Scripture", "Response", "Sermon"])
+    // It stops at a section's header: Scripture opens "Scripture moments", so Alt+↑ leaves it there.
+    const scripture = [...el.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.includes("Scripture") && b.title.includes("Alt+"))!
+    const headersBefore = structuredClone(q().headers)
+    await act(async () => scripture.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true })))
+    expect(ids()).toEqual(["Prayer", "Scripture", "Response", "Sermon"])
+    expect(q().headers).toEqual(headersBefore)
     expect(live()).toEqual(liveBefore)
   })
 
