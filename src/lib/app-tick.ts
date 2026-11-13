@@ -6,6 +6,7 @@ import { refreshLiveState } from "@/lib/live-state"
 import { refreshStageCountdown } from "@/stores/stage-finish"
 import { checkCountdownChime } from "@/stores/countdown-chime"
 import { checkFixedStarts } from "@/stores/fixed-start-auto-store"
+import { checkTickerWindow } from "@/stores/ticker-window-store"
 
 // Rust's one-second tick to the operator's window: timers held back while it is hidden catch up here.
 void listen("app:tick", () => {
@@ -16,4 +17,5 @@ void listen("app:tick", () => {
   refreshStageCountdown()
   checkCountdownChime()
   checkFixedStarts()
+  checkTickerWindow()
 }).catch(() => {})
