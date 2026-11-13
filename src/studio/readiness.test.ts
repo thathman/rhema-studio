@@ -82,6 +82,13 @@ describe("computeReadiness", () => {
     expect(r.checks.find((x) => x.id === "listening")?.status).toBe("info")
   })
 
+  it("says No service open, not an empty service, when none is open (UX audit slice 9)", () => {
+    const none = computeReadiness({ ...good, rundownCount: 0, serviceOpen: false }).checks.find((c) => c.id === "rundown")!
+    expect(none).toMatchObject({ status: "info", label: "No service open", fix: "prepare" })
+    const empty = computeReadiness({ ...good, rundownCount: 0, serviceOpen: true }).checks.find((c) => c.id === "rundown")!
+    expect(empty.label).toBe("Nothing in the service yet")
+  })
+
   it("missing Bible library blocks", () => {
     expect(computeReadiness({ ...good, translationsLoaded: 0 }).ready).toBe(false)
   })
