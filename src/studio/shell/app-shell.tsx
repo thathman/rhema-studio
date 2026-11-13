@@ -214,7 +214,8 @@ export function AppShell() {
   useEffect(() => {
     if (!goRequest) return
     useShellStore.setState({ goRequest: null })
-    void go(goRequest)
+    // Words for the Library are dropped if the Library did not open (Design's Stay), so they never turn up later.
+    void go(goRequest).then(() => { if (useShellStore.getState().workspace !== "library") useShellStore.setState({ libraryFind: null }) })
   }, [goRequest, go])
 
   const prepareProgramRequest = useShellStore((s) => s.prepareProgramRequest)

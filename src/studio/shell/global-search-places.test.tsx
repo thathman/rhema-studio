@@ -57,4 +57,14 @@ describe("Find anything opens the real places", () => {
     expect(useShellStore.getState().designRequest).toBe("library")
     expect(useShellStore.getState().searchOpen).toBe(false)
   })
+
+  it("Find anything names every place, Library section and settings section as the app does (#401, #402, #447)", async () => {
+    useShellStore.setState({ searchOpen: true, goRequest: null })
+    await render(<GlobalSearch />)
+    const labels = [...document.querySelectorAll("[cmdk-item]")].map((i) => i.textContent?.trim())
+    for (const name of ["Connections", "Collections", "Outputs", "AI assistants", "Data & Sync", "Heard verses"]) expect(labels).toContain(name)
+    const connections = [...document.querySelectorAll("[cmdk-item]")].find((i) => i.textContent?.trim() === "Connections") as HTMLElement
+    await act(async () => connections.click())
+    expect(useShellStore.getState().goRequest).toBe("connections")
+  })
 })

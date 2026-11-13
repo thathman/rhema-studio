@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { create } from "zustand"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 
@@ -146,6 +147,9 @@ interface ShellState extends ShellPrefs {
   /** Words handed to Present's Quick find (it takes them once). */
   pendingFind: string | null
   findInPresent: (query: string) => void
+  /** Words handed to one Library section's search (#407: it takes them once; Live is untouched). */
+  libraryFind: { section: LibrarySection; query: string } | null
+  findInLibrary: (section: LibrarySection, query: string) => void
   setWorkspace: (workspace: Workspace) => void
   librarySection: LibrarySection
   setLibrarySection: (section: LibrarySection) => void
@@ -245,6 +249,8 @@ export const useShellStore = create<ShellState>((set) => ({
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   pendingFind: null,
   findInPresent: (pendingFind) => set({ pendingFind, goRequest: "present" }),
+  libraryFind: null,
+  findInLibrary: (section, query) => set({ librarySection: section, libraryFind: { section, query }, goRequest: "library" }),
   setWorkspace: (workspace) => set((state) => {
     const target = canonicalWorkspace(workspace)
     const enteringLibraryDirectly = target === "library" && state.workspace !== "library"
@@ -296,3 +302,24 @@ useShellStore.subscribe((state, prev) => {
     writeShellPrefs(storage, { workspace: state.workspace, sidebarCollapsed: state.sidebarCollapsed })
   }
 })
+
+/**
+ * A Library section takes words handed to it by Find anything, now and whenever they come (#407).
+ * Only the Library's own copy (`enabled`) and only once the Library is open: a song list on a desk
+ * or in Prepare's Add dialog never takes them.
+ */
+export function useLibraryFind(section: LibrarySection, apply: (query: string) => void, enabled: boolean) {
+  const applyRef = useRef(apply)
+  useEffect(() => { applyRef.current = apply })
+  useEffect(() => {
+    if (!enabled) return
+    const take = () => {
+      const { libraryFind: f, workspace } = useShellStore.getState()
+      if (f?.section !== section || workspace !== "library") return
+      useShellStore.setState({ libraryFind: null })
+      applyRef.current(f.query)
+    }
+    take()
+    return useShellStore.subscribe((s, prev) => { if (s.libraryFind !== prev.libraryFind || s.workspace !== prev.workspace) take() })
+  }, [section, enabled])
+}

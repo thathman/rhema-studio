@@ -117,7 +117,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }))
 
-import { act } from "react"
+import { act, StrictMode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -128,6 +128,8 @@ import type { QueueItem } from "@/types"
 import { SongLibrary } from "@/studio/library/song-library"
 import { AddItems } from "@/studio/prepare/add-items"
 import { ItemEditor } from "@/studio/prepare/item-editor"
+import { useShellStore } from "@/studio/shell-store"
+import { useSongStore } from "@/stores/song-store"
 
 const slide = (id: string): QueueItem => ({
   id,
@@ -168,6 +170,42 @@ afterEach(() => {
   act(() => root?.unmount())
   root = null
   document.body.replaceChildren()
+})
+
+describe("SongLibrary takes words from Find anything (#407)", () => {
+  it("fills its search once, on opening and while open, only as the Library's copy", async () => {
+    useShellStore.setState({ workspace: "prepare", libraryFind: { section: "songs", query: "amazing" } })
+    await act(async () => root!.render(<SongLibrary privatePreview onUseItem={() => {}} />))
+    const before = document.querySelector('input[aria-label="Find a song"]') as HTMLInputElement
+    // Not taken until the Library is open.
+    expect(before.value).toBe("")
+    await act(async () => useShellStore.setState({ workspace: "library" }))
+    const input = document.querySelector('input[aria-label="Find a song"]') as HTMLInputElement
+    expect(input.value).toBe("amazing")
+    expect(useShellStore.getState().libraryFind).toBeNull()
+    await act(async () => useShellStore.setState({ libraryFind: { section: "hymns", query: "abide" } }))
+    expect(input.value).toBe("amazing")
+    await act(async () => useShellStore.setState({ libraryFind: { section: "songs", query: "grace" } }))
+    expect(input.value).toBe("grace")
+  })
+
+  it("searches the handed words last, even after a StrictMode remount", async () => {
+    const searches: string[] = []
+    const real = useSongStore.getState().search
+    useSongStore.setState({ search: (q: string, ...rest: unknown[]) => { searches.push(q); return (real as (...a: unknown[]) => Promise<never[]>)(q, ...rest) } } as never)
+    useShellStore.setState({ workspace: "library", libraryFind: { section: "songs", query: "amazing" } })
+    await act(async () => root!.render(<StrictMode><SongLibrary privatePreview onUseItem={() => {}} /></StrictMode>))
+    expect(searches.at(-1)).toBe("amazing")
+    useSongStore.setState({ search: real })
+  })
+
+  it("a song list elsewhere (a desk, Prepare's Add) never takes them", async () => {
+    useShellStore.setState({ workspace: "library", libraryFind: { section: "songs", query: "amazing" } })
+    await act(async () => root!.render(<SongLibrary privatePreview />))
+    expect((document.querySelector('input[aria-label="Find a song"]') as HTMLInputElement).value).toBe("")
+    expect(useShellStore.getState().libraryFind).toEqual({ section: "songs", query: "amazing" })
+    useShellStore.setState({ libraryFind: null })
+  })
 })
 
 describe("SongLibrary Add to a selected phase (#384)", () => {

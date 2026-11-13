@@ -14,6 +14,7 @@ import { isChoir } from "@/lib/song-kind"
 import { isSongItem, type QueueItem, type SongSummary } from "@/types"
 import { captureLibraryUseInvocation, type LibraryItemUseHandler } from "@/studio/library/library-target-store"
 import { LoadFailedRow } from "@/studio/library/load-failed-row"
+import { useLibraryFind } from "@/studio/shell-store"
 
 const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI", custom: "Custom", unknown: "Licence?" }
 
@@ -51,8 +52,10 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
       if (near.length > 0 && useSongStore.getState().query === q) useSongStore.setState({ results: near })
     })
   }, [])
+  // The words searched last, so a remount (StrictMode) searches them again rather than everything.
+  const searched = useRef("")
   useEffect(() => {
-    search("")
+    search(searched.current)
     return () => { if (timer.current) clearTimeout(timer.current) }
   }, [search])
   // The Library's "New song": open the editor (a render-time check, so no effect sets state).
@@ -68,6 +71,8 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => search(value), 180)
   }
+  // Searched at once: a timer cleared by a quick remount would leave the words unsearched.
+  useLibraryFind("songs", (q) => { setQuery(q); searched.current = q; search(q) }, Boolean(onUseItem))
 
   const add = (song: SongSummary) => {
     const item: QueueItem = songQueueItem(song)
