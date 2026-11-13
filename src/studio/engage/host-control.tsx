@@ -7,7 +7,7 @@ import { useQueueStore } from "@/stores/queue-store";
 import { engageFromItem } from "@/lib/engage";
 import { qrDataUrl } from "@/lib/qr-bulletin";
 import { useEngageHost } from "@/studio/engage/host-store";
-import { engageOnLive, showEngageOnScreens, showEngageScores, stopFollowingEngage, useEngageScreens } from "@/studio/engage/engage-screens";
+import { engageSlideUp, showEngageOnScreens, showEngageScores, stopFollowingEngage, useEngageScreens } from "@/studio/engage/engage-screens";
 import { presentActions } from "@/studio/present-actions";
 
 type PublicState = {
@@ -65,9 +65,10 @@ export function EngageHostControl() {
       return { state: next, offsetMs: next.serverNow - (start + Math.floor((Date.now() - start) / 2)) };
     });
   };
-  // Only the quiz itself comes off (nothing was on before it: Live clears); whatever an operator put up since stays.
+  // Only the quiz itself comes off (nothing was on before it: Live clears); whatever an operator put up since
+  // stays. Cleared meanwhile: what was on before comes back still off air, for Restore.
   const takeOffScreens = () => {
-    const ours = engageOnLive();
+    const ours = engageSlideUp();
     stopFollowingEngage();
     if (!ours) return;
     if (presentActions.canGoBack()) presentActions.back(); else presentActions.clear();

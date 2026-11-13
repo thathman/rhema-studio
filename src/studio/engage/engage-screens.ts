@@ -31,10 +31,16 @@ let run = 0
 let last = ""
 let latest: { state: EngagePublicState; session: EngageHostSession; offsetMs: number } | null = null
 
+/** Live's content is still the quiz slide this put up (on air or cleared off it). */
+export function engageSlideUp(): boolean {
+  const b = useBroadcastStore.getState()
+  return !!last && b.liveVerse?.quick === true && JSON.stringify(b.liveVerse.lines) === last
+}
+
 /** What is on air is still the quiz this put up (not cleared, not replaced). */
 export function engageOnLive(): boolean {
   const b = useBroadcastStore.getState()
-  return !!last && b.isLive && !b.cleared && b.liveVerse?.quick === true && JSON.stringify(b.liveVerse.lines) === last
+  return engageSlideUp() && b.isLive && !b.cleared
 }
 
 function put(s: EngagePublicState, session: EngageHostSession, offsetMs: number) {

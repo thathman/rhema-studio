@@ -4,7 +4,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emit: vi.fn(async () => {}), emitTo: vi.fn(async () => {}) }))
 
 import { engageSlide, type EngagePublicState } from "@/lib/engage-screen"
-import { engageOnLive, showEngageOnScreens, showEngageScores, stopFollowingEngage, useEngageScreens } from "@/studio/engage/engage-screens"
+import { engageOnLive, engageSlideUp, showEngageOnScreens, showEngageScores, stopFollowingEngage, useEngageScreens } from "@/studio/engage/engage-screens"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { presentActions } from "@/studio/present-actions"
 
@@ -82,6 +82,11 @@ describe("following the quiz on Live", () => {
     await tick()
     expect(useBroadcastStore.getState().isLive).toBe(false)
     expect(useEngageScreens.getState().following).toBe(false)
+    // Taken off after the Clear: Restore would bring back what was on before, not the quiz.
+    expect(engageSlideUp()).toBe(true)
+    presentActions.back()
+    expect(live()?.reference).toBe("Notices")
+    expect(useBroadcastStore.getState().isLive).toBe(false)
   })
 
   it("keeps the last slide when the service cannot be reached", async () => {
