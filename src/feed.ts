@@ -366,7 +366,11 @@ function show(next: Frame) {
     // Cameras and videos playing under the canvas left holes in it: they go out with the picture
     // too, drawn under it in their boxes (cropped and turned as the frame draws them).
     const out = frame?.scene
-    const playing = out ? out.layers.filter((l) => (l.kind === "camera" || l.kind === "video") && shownBelow(l.id)) : []
+    // One that stays where it is in the next scene keeps playing live under it: not frozen into the
+    // picture fading out (it would ghost over the live one).
+    const place = (l: { box: unknown; rotation?: number; crop?: unknown; cameraUrl?: string; videoUrl?: string; mediaFile?: string }) => JSON.stringify([l.box, l.rotation, l.crop, l.cameraUrl, l.videoUrl, l.mediaFile])
+    const stays = (l: Parameters<typeof place>[0] & { id: string; kind: string }) => !!next.scene?.layers.some((n) => n.id === l.id && n.kind === l.kind && place(n) === place(l))
+    const playing = out ? out.layers.filter((l) => (l.kind === "camera" || l.kind === "video") && shownBelow(l.id) && !stays(l)) : []
     if (fctx && out && playing.length) {
       const under = document.createElement("canvas")
       under.width = canvas.width
