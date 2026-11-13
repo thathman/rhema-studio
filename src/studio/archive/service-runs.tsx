@@ -149,8 +149,8 @@ export function JournalBlock({ onOpenRun }: { onOpenRun?: (runId: string) => voi
           </SelectContent>
         </Select>
       </label>}
-      <SavedRuns key={`${filterProgramId}:${archived}`} programId={filterProgramId === "all" ? null : filterProgramId} onOpenRun={onOpenRun} />
-      <KeptLogs key={`${filterProgramId}:${archived}`} refresh={archived} programId={filterProgramId === "all" ? null : filterProgramId} onChanged={() => setArchived((count) => count + 1)} />
+      <SavedRuns key={`runs:${filterProgramId}:${archived}`} programId={filterProgramId === "all" ? null : filterProgramId} onOpenRun={onOpenRun} />
+      <KeptLogs key={`logs:${filterProgramId}:${archived}`} refresh={archived} programId={filterProgramId === "all" ? null : filterProgramId} onChanged={() => setArchived((count) => count + 1)} />
     </div>
   )
 }
