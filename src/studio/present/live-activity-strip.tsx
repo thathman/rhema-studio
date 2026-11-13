@@ -23,7 +23,7 @@ export function LiveActivityStrip() {
       role="group"
       aria-label="Live team activity"
       data-testid="live-activity-strip"
-      className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1"
+      className="mt-auto flex shrink-0 flex-wrap items-center gap-1 border-t border-border px-2 py-1"
     >
       <LiveCrewStatus />
       {showUnavailable && (
