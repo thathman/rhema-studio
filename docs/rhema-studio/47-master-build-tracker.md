@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.3.0.0 · 13 Nov 2026 · main `1d3fc4a2`**
+**Version 1.3.0.0 · 13 Nov 2026 · main `efee77d3`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -106,11 +106,13 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Prepare keyboard moves (#444) | MERGED | #912 (13 Nov): Alt+↑/↓ moves a moment and keeps focus on it. |
 | Words a screen would cut off (#217) | MERGED | #913 (13 Nov): readiness warns, before the service, about each planned verse or song slide too long for a congregation screen's look even at its smallest size ("Psalm 119:1 will be cut off on Main Display"), with Got it for the service. Not yet: scenes, custom slides, a verse's second translation. |
 | Church's first language for songs (#446) | MERGED | #914 (13 Nov): Setup's "Hymns and songs show first in" also orders new song items and AI-drafted songs. |
-| Design fidelity on outputs (#448) | MERGED | #916 (13 Nov): rectangles and ellipses keep their outlines, and rectangles their rounded corners, drawn with the editor's own path code (Skia pixels within 0.1% of the editor), kept through a joined desk's save and through a layer fade. #917: faded and turned groups are saved as the editor draws them (each layer faded and turned). Not yet seen on a TV. |
+| Design fidelity on outputs (#448) | MERGED | #916 (13 Nov): rectangles and ellipses keep their outlines, and rectangles their rounded corners, drawn with the editor's own path code (Skia pixels within 0.1% of the editor), kept through a joined desk's save and through a layer fade. #917: faded and turned groups are saved as the editor draws them (each layer faded and turned). #921: a layer's shadow and blur, scaled with the screen (blur needs WebKit with Canvas filter, Safari 18+, in the editor too). Not yet seen on a TV. |
 | MCP: read and revise its own design drafts (#443) | MERGED | #915 (13 Nov): rhema_get_design (local file and network addresses removed, 256 KB cap) and rhema_update_design_draft (only a draft an assistant made, no person's save since, no version, at the revision read, at most once in 2 minutes). Two security reviews. |
 | AI draft added to the open service (#252) | MERGED | #918 (13 Nov): Prepare → AI drafts → Add to this service puts the chosen items after the service's own, before its closing loop, as plain sections; the item on air stays the same; one Undo. |
 | MCP proposals with outlines and corners (#448 #443) | MERGED | #920 (13 Nov): an assistant's proposed rectangles and ellipses may have outlines, and rectangles rounded corners; the limits are in a golden the editor's adapter opens. |
 | A desk queues into a chosen event (#409) | MERGED | #919 (13 Nov): Notices → Queue has an "into:" choice of the plan's events; the main computer adds the verse or song at that event's end, or refuses with why if the event is gone. |
+| Docs link check in CI (#413) | AUTOMATED TESTED | #922 (13 Nov): CI fails when a relative Markdown link points at nothing; two dead links fixed. |
+| Timekeeper "Service starts at" (#196) | MERGED | #924 (13 Nov): sets the running-late offset from the main service's planned start in one step, across midnight, refused beyond −2 h/+4 h; before the service begins only. Joined Timekeeper desks still have ±5 only. |
 | Backup and restore safety | MERGED | #786 (refuses backups from newer versions; restore blocked while on air). |
 
 ### Phase E — Supervised church rehearsal
