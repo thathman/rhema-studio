@@ -303,18 +303,23 @@ useShellStore.subscribe((state, prev) => {
   }
 })
 
-/** A Library section takes words handed to it by Find anything, now and whenever they come (#407). */
-export function useLibraryFind(section: LibrarySection, apply: (query: string) => void) {
+/**
+ * A Library section takes words handed to it by Find anything, now and whenever they come (#407).
+ * Only the Library's own copy (`enabled`) and only once the Library is open: a song list on a desk
+ * or in Prepare's Add dialog never takes them.
+ */
+export function useLibraryFind(section: LibrarySection, apply: (query: string) => void, enabled: boolean) {
   const applyRef = useRef(apply)
   useEffect(() => { applyRef.current = apply })
   useEffect(() => {
+    if (!enabled) return
     const take = () => {
-      const f = useShellStore.getState().libraryFind
-      if (f?.section !== section) return
+      const { libraryFind: f, workspace } = useShellStore.getState()
+      if (f?.section !== section || workspace !== "library") return
       useShellStore.setState({ libraryFind: null })
       applyRef.current(f.query)
     }
     take()
-    return useShellStore.subscribe((s, prev) => { if (s.libraryFind !== prev.libraryFind) take() })
-  }, [section])
+    return useShellStore.subscribe((s, prev) => { if (s.libraryFind !== prev.libraryFind || s.workspace !== prev.workspace) take() })
+  }, [section, enabled])
 }

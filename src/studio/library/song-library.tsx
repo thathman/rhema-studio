@@ -69,7 +69,8 @@ export function SongLibrary({ layout = "list", newRequest = 0, onAdded, onUseIte
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => search(value), 180)
   }
-  useLibraryFind("songs", onChange)
+  // Searched at once: a timer cleared by a quick remount would leave the words unsearched.
+  useLibraryFind("songs", (q) => { setQuery(q); search(q) }, Boolean(onUseItem))
 
   const add = (song: SongSummary) => {
     const item: QueueItem = songQueueItem(song)

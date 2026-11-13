@@ -106,7 +106,8 @@ export function GlobalSearch() {
         {query.trim().length > 1 && (
           // In the Library (#407): found there, previewed there; nothing reaches Live.
           <CommandGroup heading="Scripture, hymns and songs (in the Library)">
-            {FIND_IN.map(([section, label]) => (
+            {/* The Bible looks up references ("John 3:16", "jn 3 16"), so it is offered only for words with a number. */}
+            {FIND_IN.filter(([section]) => section !== "bible" || /\d/.test(query)).map(([section, label]) => (
               <CommandItem key={section} value={`library find ${section} ${query}`} onSelect={() => run(() => useShellStore.getState().findInLibrary(section, query.trim()))}>
                 <LibraryBigIcon /> <span className="truncate">Find “{query.trim()}” in {label}</span>
                 <span className="ml-auto shrink-0 text-xs text-muted-foreground">opens the Library</span>

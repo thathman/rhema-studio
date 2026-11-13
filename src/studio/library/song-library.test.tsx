@@ -172,9 +172,13 @@ afterEach(() => {
 })
 
 describe("SongLibrary takes words from Find anything (#407)", () => {
-  it("fills its search once, on opening and while open", async () => {
-    useShellStore.setState({ libraryFind: { section: "songs", query: "amazing" } })
-    await act(async () => root!.render(<SongLibrary />))
+  it("fills its search once, on opening and while open, only as the Library's copy", async () => {
+    useShellStore.setState({ workspace: "prepare", libraryFind: { section: "songs", query: "amazing" } })
+    await act(async () => root!.render(<SongLibrary privatePreview onUseItem={() => {}} />))
+    const before = document.querySelector('input[aria-label="Find a song"]') as HTMLInputElement
+    // Not taken until the Library is open.
+    expect(before.value).toBe("")
+    await act(async () => useShellStore.setState({ workspace: "library" }))
     const input = document.querySelector('input[aria-label="Find a song"]') as HTMLInputElement
     expect(input.value).toBe("amazing")
     expect(useShellStore.getState().libraryFind).toBeNull()
@@ -182,6 +186,14 @@ describe("SongLibrary takes words from Find anything (#407)", () => {
     expect(input.value).toBe("amazing")
     await act(async () => useShellStore.setState({ libraryFind: { section: "songs", query: "grace" } }))
     expect(input.value).toBe("grace")
+  })
+
+  it("a song list elsewhere (a desk, Prepare's Add) never takes them", async () => {
+    useShellStore.setState({ workspace: "library", libraryFind: { section: "songs", query: "amazing" } })
+    await act(async () => root!.render(<SongLibrary privatePreview />))
+    expect((document.querySelector('input[aria-label="Find a song"]') as HTMLInputElement).value).toBe("")
+    expect(useShellStore.getState().libraryFind).toEqual({ section: "songs", query: "amazing" })
+    useShellStore.setState({ libraryFind: null })
   })
 })
 
