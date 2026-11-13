@@ -196,5 +196,5 @@ clock otherwise); only while the service is running and its timing trusted; it w
 rehearsal and on a Hold; never an event out of order, never one already late (rule 2 still
 applies: it starts when what runs before it finishes, by a person), never a milestone; within two
 minutes of its time or not at all; only fixed starts after arming; not kept over a restart. The
-event clock never changes a screen. Code: `src/stores/fixed-start-auto-store.ts`. The armed
-ticker window (#187, `src/stores/ticker-window-store.ts`) follows the same rules for the ticker.
+event clock never changes a screen. Code: `src/stores/fixed-start-auto-store.ts`. Late is judged as
+the fixed start comes. The main service's first event, after a pre-service, may start this way too.
