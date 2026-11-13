@@ -1,7 +1,7 @@
 import "./broadcast-fonts.css"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
-import { drawScene, drawTickerLayer, LayerFader, sceneOverlay } from "@/lib/scene-renderer"
-import { syncSceneVideos, videoReady } from "@/lib/scene-videos"
+import { drawScene, drawTickerLayer, LayerFader, sceneArea, sceneOverlay } from "@/lib/scene-renderer"
+import { playerRect, syncSceneVideos, videoReady } from "@/lib/scene-videos"
 import { feedMotion, feedNext, tickerStrips } from "@/lib/feed-motion"
 import { noiseFrame } from "@/lib/no-signal"
 import { drawStage, stageSurface } from "@/lib/stage-canvas"
@@ -109,12 +109,24 @@ function placeCameras() {
   if (f?.theme && f.scene && !f.off) {
     const { width, height } = f.theme.resolution
     const { scale, ox, oy } = onScreen(width, height)
+    // The players sit in the picture and are cut off at its edge, as the frame's cut-outs are: a
+    // turned camera's corners never spill into the overscan margin or letterbox bars (#448).
+    const pic = { position: "fixed", inset: "auto", left: `${ox}px`, top: `${oy}px`, width: `${width * scale}px`, height: `${height * scale}px` }
+    const picKey = Object.values(pic).join(" ")
+    if (below.dataset.place !== picKey) {
+      Object.assign(below.style, pic)
+      below.dataset.place = picKey
+    }
+    // Laid out in the scene's own area, as drawScene lays out their cut-outs (a design's shape on a
+    // differently shaped screen is letterboxed inside the picture).
+    const a = sceneArea(width, height, f.scene.aspect)
     const order: HTMLVideoElement[] = []
     for (const l of f.scene.layers) {
       const v = belowElement(l.id)
       if ((l.kind !== "camera" && l.kind !== "video") || !v || !shownBelow(l.id)) continue
+      const p = playerRect(a, l.box, scale)
       // Turned as the frame turns its cut-out: about the box's centre (#448).
-      Object.assign(v.style, { position: "absolute", objectFit: "cover", opacity: String(l.opacity), transform: l.rotation ? `rotate(${l.rotation}deg)` : "", transformOrigin: "50% 50%", left: `${ox + (width * scale * l.box.x) / 100}px`, top: `${oy + (height * scale * l.box.y) / 100}px`, width: `${(width * scale * l.box.w) / 100}px`, height: `${(height * scale * l.box.h) / 100}px` })
+      Object.assign(v.style, { position: "absolute", objectFit: "cover", opacity: String(l.opacity), transform: l.rotation ? `rotate(${l.rotation}deg)` : "", transformOrigin: "50% 50%", left: `${p.left}px`, top: `${p.top}px`, width: `${p.width}px`, height: `${p.height}px` })
       order.push(v)
       keep.add(v)
     }
