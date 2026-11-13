@@ -367,6 +367,7 @@ print(json.dumps(report.get("result"), ensure_ascii=False, indent=2))
 PY
 
 # Home (#405, #406): Next and the Sunday summary skip hidden and skipped-phase items; Service readiness.
+# Then Find anything → Connections (#401), and Add item closes the picker and opens the new item (#386).
 set +e
 {
   cat "$ROOT/scripts/mac-qa/home-journey.js"
