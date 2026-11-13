@@ -532,7 +532,7 @@ function TranscriptRetention() {
 /* -------------------------------------------------------------------------- */
 
 function DisplayModeSection() {
-  // The same switch as Auto on Present's Program panel (FR-01: off until turned on).
+  // The same switch as Auto in Live tools → Listening (FR-01: off until turned on).
   const mode = useBroadcastStore(autoModeOf)
   const setAutoMode = useBroadcastStore((s) => s.setAutoMode)
 
@@ -586,7 +586,7 @@ function DisplayModeSection() {
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Auto</span>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Take live. Present shows "Auto-live on" while it is listening. Same as Auto on the Program panel.
+                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Take live. Present shows "Auto-live on" while it is listening. Same as Auto in Live tools → Listening.
               </p>
             </div>
           </label>

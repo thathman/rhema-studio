@@ -1,6 +1,7 @@
 import { BookOpenIcon, ImageIcon, Maximize2Icon, MicIcon, Minimize2Icon, MonitorCogIcon, SlidersHorizontalIcon, SquareIcon, UndoIcon, XIcon } from "lucide-react"
 import { presentActions } from "@/studio/present-actions"
 import { DetectionsPanel } from "@/components/panels/detections-panel"
+import { AutoModeControl } from "@/components/panels/auto-mode-control"
 import { TranscriptPanel } from "@/components/panels/transcript-panel"
 import { Button } from "@/components/ui/button"
 import { EmbeddingWarningBanner } from "@/components/ui/embedding-warning-banner"
@@ -154,8 +155,9 @@ export function LiveToolsDrawer({
               <div className="min-h-0 flex-1"><QuickFind mode="present" autoFocus /></div>
             </div>
           </TabsContent>
-          <TabsContent value="listening" className="mt-2 min-h-0 flex-1 overflow-hidden">
-            <div className="grid h-full min-h-0 grid-rows-2 gap-2 min-[900px]:grid-cols-2 min-[900px]:grid-rows-1">
+          <TabsContent value="listening" className="mt-2 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+            <div className="flex shrink-0 items-center"><AutoModeControl /></div>
+            <div className="grid min-h-0 flex-1 grid-rows-2 gap-2 min-[900px]:grid-cols-2 min-[900px]:grid-rows-1">
               <TranscriptPanel />
               <DetectionsPanel />
             </div>

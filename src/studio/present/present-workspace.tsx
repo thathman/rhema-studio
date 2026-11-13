@@ -330,7 +330,7 @@ export function PresentWorkspace() {
             <StatusChip
               tone="warn"
               label="Auto-live on"
-              title="Heard verses can change the Bible source without Take source live. Click to turn this off; the Auto control is in the Program panel."
+              title="Heard verses can change the Bible source without Take source live. Click to turn this off; the Auto control is in Live tools → Listening."
               onClick={() => useBroadcastStore.getState().setAutoLive(false)}
             />
           )}
