@@ -77,10 +77,11 @@ describe("Rhema scenes in the Avnac engine", () => {
     }
 
     const selected = designToScene(multiPage, pageTwo.id)
+    // One layer in a faded page: fading the layer looks the same (#448). Its turn is still refused.
     expect(selected.issues).toEqual([
-      { nodeId: pageTwo.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" },
       { nodeId: pageTwo.id, message: "Group rotation cannot be saved into a Rhema scene yet" },
     ])
+    expect(selected.scene.layers[0]?.opacity).toBeCloseTo(pageTwo.opacity * second.opacity, 3)
     expect(selected.scene.layers).toEqual([expect.objectContaining({ id: "second", kind: "text", text: "Second page" })])
     expect(designToScene(multiPage, pageOne.id).issues).toEqual([])
     expect(designToScene(multiPage, "deleted-page").issues).toEqual([
@@ -227,7 +228,7 @@ describe("Rhema scenes in the Avnac engine", () => {
     expect(byId.cam.visible).toBe(false)
     expect(byId.verse.visible).toBe(false)
     expect(issues).toEqual(expect.arrayContaining([
-      { nodeId: group.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" },
+      { nodeId: group.id, message: expect.stringContaining("A faded group whose layers overlap") },
       { nodeId: group.id, message: "Group rotation cannot be saved into a Rhema scene yet" },
     ]))
   })
@@ -296,11 +297,17 @@ describe("picture crop and clipping (#448 Slice B)", () => {
     expect(designToScene({ ...design, scene }).issues).toEqual([{ nodeId: "pic", message: expect.stringContaining(says) }])
   })
 
-  it("still refuses group opacity and rotation", () => {
+  it("fades a group's layers when they do not overlap, and refuses it when they do (#448)", () => {
     const design = sceneToDesign(sermon)
     const root = design.scene.nodes[design.scene.root]!
     const faded = designToScene({ ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, [root.id]: { ...root, opacity: 0.5 } } } })
-    expect(faded.issues).toContainEqual({ nodeId: root.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" })
+    expect(faded.issues).toContainEqual({ nodeId: root.id, message: expect.stringContaining("A faded group whose layers overlap") })
+    const apart: Scene = { ...sermon, layers: [layer("a", "color", { color: "#ff0000", box: { x: 0, y: 0, w: 40, h: 40 }, opacity: 0.8 }), layer("b", "ellipse", { color: "#00ff00", box: { x: 50, y: 50, w: 40, h: 40 } })] }
+    const d2 = sceneToDesign(apart)
+    const r2 = d2.scene.nodes[d2.scene.root]!
+    const out = designToScene({ ...d2, scene: { ...d2.scene, nodes: { ...d2.scene.nodes, [r2.id]: { ...r2, opacity: 0.5 } } } })
+    expect(out.issues).toEqual([])
+    expect(out.scene.layers.map((l) => [l.id, l.opacity])).toEqual([["a", 0.4], ["b", 0.5]])
   })
 })
 

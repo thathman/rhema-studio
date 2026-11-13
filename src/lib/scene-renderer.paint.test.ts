@@ -64,6 +64,27 @@ describe("scene paint on a real canvas", () => {
     expect(differ / (1920 * 1080)).toBeLessThan(0.001)
   })
 
+  it("a faded group of layers apart draws as the editor fades it (#448)", async () => {
+    const apart: Scene = { ...painted, id: "apart", backgroundGradient: undefined, layers: [
+      layer("left", "color", { color: "#3157a4", box: { x: 5, y: 10, w: 35, h: 60 } }),
+      layer("right", "ellipse", { color: "#d14c62", box: { x: 55, y: 20, w: 35, h: 60 }, opacity: 0.8 }),
+    ] }
+    const design = sceneToDesign(apart)
+    const root = design.scene.nodes[design.scene.root]!
+    const fadedScene = { ...design.scene, nodes: { ...design.scene.nodes, [root.id]: { ...root, opacity: 0.5 } } }
+    const editor = createCanvas(1920, 1080)
+    await canvas2DRendererBackend.render(ctxOf(editor), buildRenderCommands(fadedScene))
+    const saved = designToScene({ ...design, scene: fadedScene })
+    expect(saved.issues).toEqual([])
+    const output = drawOutput(saved.scene, 1920, 1080)
+    const a = ctxOf(editor).getImageData(0, 0, 1920, 1080).data
+    const b = ctxOf(output).getImageData(0, 0, 1920, 1080).data
+    let differ = 0
+    for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
+    expect(differ / (1920 * 1080)).toBeLessThan(0.001)
+    expect(near(pixel(output, 1920 * 0.2, 1080 * 0.4), mix(NAVY, BLUE, 0.5))).toBe(true)
+  })
+
   it("puts each gradient's colours where the angle says, at 1920×1080 and 1280×720", () => {
     for (const [w, h] of [[1920, 1080], [1280, 720]] as const) {
       const c = drawOutput(painted, w, h)

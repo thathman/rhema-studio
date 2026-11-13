@@ -294,14 +294,17 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
     issues.push({ nodeId: "__artboard__", message: "This background paint cannot be drawn on Rhema outputs" })
   }
   for (const node of groupNodesUnder(design.scene, pageRoot)) {
-    if (Math.abs(node.opacity - 1) > 0.0001) {
-      issues.push({ nodeId: node.id, message: "Group opacity cannot be saved into a flat Rhema scene yet" })
+    // A faded group (#448): the editor fades it as one picture. Fading each of its layers instead
+    // looks the same while none of them overlap, so that is saved; overlapping layers would show
+    // through each other, so they are refused.
+    if (Math.abs(node.opacity - 1) > 0.0001 && layersOverlap(design.scene, node.id)) {
+      issues.push({ nodeId: node.id, message: "A faded group whose layers overlap cannot be saved into a Rhema scene yet; fade the layers themselves, or move them apart" })
     }
     if (Math.abs(node.rotation ?? 0) > 0.0001) {
       issues.push({ nodeId: node.id, message: "Group rotation cannot be saved into a Rhema scene yet" })
     }
   }
-  for (const { node, visible } of layerEntries(design.scene, issues, pageRoot)) {
+  for (const { node, visible, groupOpacity } of layerEntries(design.scene, issues, pageRoot)) {
     const binding = design.bindings[node.id]
     if (!binding) {
       issues.push({ nodeId: node.id, message: `"${node.name ?? node.id}" was drawn in the editor; Rhema scenes cannot show it yet` })
@@ -337,7 +340,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       ...layerBinding,
       name: node.name ?? node.id,
       box: { x: round((size.x / DESIGN_WIDTH) * 100), y: round((size.y / DESIGN_HEIGHT) * 100), w: round((size.w / DESIGN_WIDTH) * 100), h: round((size.h / DESIGN_HEIGHT) * 100) },
-      opacity: node.opacity,
+      opacity: round(node.opacity * groupOpacity),
       visible,
     } as SceneLayer
     delete layer.rotation
@@ -607,4 +610,16 @@ export function previewDesign(design: RhemaDesign, live: LivePreviewInput): Sara
     })
   }
   return preview
+}
+
+/** Whether any two layers in a group (at any depth) overlap on the artboard, as the editor bounds them. */
+function layersOverlap(scene: SaraswatiScene, groupId: string): boolean {
+  const boxes = layerEntries(scene, [], groupId).map(({ node }) => getNodeBounds(node))
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i]!, b = boxes[j]!
+      if (a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height) return true
+    }
+  }
+  return false
 }
