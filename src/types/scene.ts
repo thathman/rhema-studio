@@ -85,6 +85,13 @@ export interface SceneClock {
 export type NoSignal = "bars" | "static" | "words" | "none"
 export const NO_SIGNALS: readonly NoSignal[] = ["bars", "static", "words", "none"]
 
+/** A shape's outline (#448): a solid colour, centred on its edge like the Design editor's stroke. */
+export interface SceneOutline {
+  color: string
+  /** px on the 1920×1080 artboard. */
+  width: number
+}
+
 export interface SceneLayer {
   id: string
   name: string
@@ -111,6 +118,10 @@ export interface SceneLayer {
   color?: string
   /** color, ellipse: a gradient fill drawn instead of `color`, which older builds show (#448). */
   gradient?: SceneGradient
+  /** color, ellipse: an outline drawn on the shape's edge, as the editor does (width in px on the 1920×1080 artboard; #448). */
+  outline?: SceneOutline
+  /** color: rounded corners, px on the 1920×1080 artboard (#448). */
+  corner?: number
   /** text: literal content (not a live source binding). */
   text?: string
   /**
@@ -209,6 +220,8 @@ export interface SceneLayerFrame {
   color?: string
   /** color, ellipse: drawn instead of `color`. */
   gradient?: SceneGradient
+  outline?: SceneOutline
+  corner?: number
   /** text: static words and their version-pinned style, rendered by every subscribed output. */
   text?: string
   fontSize?: number

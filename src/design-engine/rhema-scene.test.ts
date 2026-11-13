@@ -126,10 +126,18 @@ describe("Rhema scenes in the Avnac engine", () => {
     expect(graded.scene.layers[0]).toMatchObject({ color: "#d14c62", gradient: { angle: 90, stops: [{ color: "#d14c62", offset: 0 }, { color: "#3157a4", offset: 1 }] } })
     const badGradient = applyCommand(design.scene, { type: "SET_NODE_FILL", id: "oval", fill: { type: "gradient", css: "", stops: [{ color: "red", offset: 0 }, { color: "#3157a4", offset: 1 }], angle: 90 } })
     expect(designToScene({ ...design, scene: badGradient }).issues).toContainEqual({ nodeId: "oval", message: "This ellipse gradient cannot be drawn on Rhema outputs: Gradient colours must be hex (#rrggbb, #rrggbbaa) or rgb()/rgba() with whole-number channels" })
+    // An outline is saved and drawn on outputs (#448), and reopens in the editor as its stroke.
     const stroke = applyCommand(design.scene, { type: "SET_NODE_STROKE", id: "oval", stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 2 })
-    expect(designToScene({ ...design, scene: stroke }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse stroke and clipping cannot be saved into a Rhema scene yet" })
+    const outlined = designToScene({ ...design, scene: stroke })
+    expect(outlined.issues).toEqual([])
+    expect(outlined.scene.layers[0]).toMatchObject({ outline: { color: "#ffffff", width: 2 } })
+    expect(sceneToDesign(outlined.scene).scene.nodes.oval).toMatchObject({ stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 2 })
+    const gradientStroke = applyCommand(design.scene, { type: "SET_NODE_STROKE", id: "oval", stroke: { type: "gradient", css: "", stops: [{ color: "#ffffff", offset: 0 }, { color: "#000000", offset: 1 }], angle: 0 }, strokeWidth: 2 })
+    expect(designToScene({ ...design, scene: gradientStroke }).issues).toContainEqual({ nodeId: "oval", message: "Outline colours must be a solid #rrggbb for Rhema outputs" })
+    const stretchedStroke = { ...stroke, nodes: { ...stroke.nodes, oval: { ...stroke.nodes.oval, scaleX: 2 } } } as typeof stroke
+    expect(designToScene({ ...design, scene: stretchedStroke }).issues).toContainEqual({ nodeId: "oval", message: expect.stringContaining("stretched shape") })
     const clip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "oval", clipPath: { type: "ellipse", x: 0, y: 0, width: 100, height: 100 } })
-    expect(designToScene({ ...design, scene: clip }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse stroke and clipping cannot be saved into a Rhema scene yet" })
+    expect(designToScene({ ...design, scene: clip }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse clipping cannot be saved into a Rhema scene yet" })
     const rotated = applyCommand(design.scene, { type: "ROTATE_NODE", id: "oval", rotation: 12 })
     // A turned layer saves its turn (#851 G7): outputs turn it about its box's centre.
     expect(designToScene({ ...design, scene: rotated })).toMatchObject({ issues: [], scene: { layers: [{ id: "oval", rotation: 12 }] } })
