@@ -1,4 +1,5 @@
 import { ErrorBoundary } from "@/components/error-boundary"
+import { ShowHealthSheet } from "@/studio/production/show-health-sheet"
 import { useUnsavedStore } from "@/stores/unsaved-store"
 import { toast } from "sonner"
 import "@/stores/journal-store"
@@ -341,6 +342,7 @@ export function AppShell() {
       {/* Global dialogs: reachable from every workspace, mounted exactly once. */}
       <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
       <GlobalSearch />
+      <ErrorBoundary name="Show health" quiet><ShowHealthSheet /></ErrorBoundary>
       <SetupWizard />
       <SetupStatusDialog />
     </div>

@@ -3,7 +3,7 @@ import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react"
-import { ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { ActivityIcon, ArrowUpIcon, BookOpenIcon, FolderOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, MonitorCogIcon, PlusIcon, SearchIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
@@ -30,7 +30,7 @@ import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-
 import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 import { LiveActivityStrip } from "@/studio/present/live-activity-strip"
 import { useTakeAttemptStore } from "@/stores/take-attempt-store"
-import { liveToolsExpanded, useProductionTab } from "@/studio/production/production-tab"
+import { liveToolsExpanded, openProductionTab, useProductionTab } from "@/studio/production/production-tab"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
 import { nextVisibleItem, orderCounts, plannedTimes, runOfShowClockRows } from "@/lib/run-of-show"
 import type { EventTiming } from "@/lib/timing-engine"
@@ -323,6 +323,9 @@ export function PresentWorkspace() {
             }}
           >
             <MonitorCogIcon /> Live tools
+          </Button>
+          <Button type="button" variant="outline" size="xs" title="Checks, devices and this computer, in a side sheet; nothing on the screens changes" onClick={() => openProductionTab("health")}>
+            <ActivityIcon /> Show health
           </Button>
           {listening && micLost && <StatusChip tone="warn" label="Microphone disconnected" title="Nothing is being heard: check the cable or choose another input in Settings. Listening goes on by itself when it is back." />}
           {listening && !micLost && <StatusChip tone="ok" label={cloudSpeechProvider ? `Listening (${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"})` : "Listening"} title={cloudSpeechProvider ? `Microphone sound is being sent to ${cloudSpeechProvider === "openai" ? "OpenAI" : "Deepgram"}` : "Microphone listening is active"} />}

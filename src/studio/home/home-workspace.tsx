@@ -1,8 +1,9 @@
 import { useDismissedChecks } from "@/studio/dismissed-checks"
+import { openProductionTab } from "@/studio/production/production-tab"
 import { useSettingsStore } from "@/stores/settings-store"
 import { openConnectionsHub } from "@/studio/connections/navigation"
 import { approvalState } from "@/lib/approval"
-import { ArrowRightIcon, BookOpenIcon, CalendarDaysIcon, CheckIcon, ChevronRightIcon, ImageIcon, InfoIcon, MonitorIcon, MusicIcon, PlayIcon, PlusIcon, PresentationIcon, TriangleAlertIcon } from "lucide-react"
+import { ActivityIcon, ArrowRightIcon, BookOpenIcon, CalendarDaysIcon, CheckIcon, ChevronRightIcon, ImageIcon, InfoIcon, MonitorIcon, MusicIcon, PlayIcon, PlusIcon, PresentationIcon, TriangleAlertIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -73,6 +74,7 @@ export function HomeWorkspace() {
             <h1 className="mt-1 text-2xl leading-tight font-semibold tracking-tight">{greeting()}{operatorName ? `, ${operatorName.split(/\s+/)[0]}` : ""}</h1>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => openProductionTab("health")}><ActivityIcon /> Show health</Button>
             <Button variant="outline" onClick={() => setWorkspace("archive")}><CalendarDaysIcon /> View services</Button>
             <Button onClick={() => { useShellStore.getState().setNewServiceOpen(true); setWorkspace("prepare") }}><PlusIcon /> New service</Button>
           </div>
