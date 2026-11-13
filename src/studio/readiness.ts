@@ -301,7 +301,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           ? [{ id: "timing", status: "ok" as const, label: `Planned to end at ${i.timing.plannedEnd}` }]
           : []),
     ...(i.camerasWithoutAddress?.length
-      ? [{ id: "cameras", status: "info" as const, label: `${i.camerasWithoutAddress.join(", ")}: a camera layer has no stream address`, detail: "Its box shows colour bars (or what the scene says) instead. Add the camera's address (WHEP, e.g. from MediaMTX) in Live → Production tools → Scenes." }]
+      ? [{ id: "cameras", status: "info" as const, label: `${i.camerasWithoutAddress.join(", ")}: a camera layer has no stream address`, detail: "Its box shows colour bars (or what the scene says) instead. Add the camera's address (WHEP, e.g. from MediaMTX) in Design → Scenes." }]
       : []),
     ...(i.camerasNotSending?.length
       ? [{

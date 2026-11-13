@@ -498,7 +498,7 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
     case "scene":
       // Scenes opens the copy in the composer: arranging it there changes nothing on air until Take.
       if (edit && added.scene) openProductionTab("programs", { sceneId: added.scene.id })
-      toast(`Added the scene “${added.scene?.name}”${added.themes.length ? ` and its look “${added.themes.map((t) => t.name).join("”, “")}”` : ""}.`, { description: `${keptNote}Set its camera and take it in Live → Production tools → Scenes; nothing is on air yet.` })
+      toast(`Added the scene “${added.scene?.name}”${added.themes.length ? ` and its look “${added.themes.map((t) => t.name).join("”, “")}”` : ""}.`, { description: `${keptNote}Set its camera and take it in Design → Scenes; nothing is on air yet.` })
       return
   }
 }

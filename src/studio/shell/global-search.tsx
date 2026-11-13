@@ -24,6 +24,7 @@ const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string
 const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["themes", "Themes", "bible songs hymns slides pictures fonts colours background"],
   ["library", "Design templates", "ready-made looks starter templates built-in classic contemporary high contrast seasonal camera scene"],
+  ["scenes", "Scenes", "scenes program layout layers congregation composer arrange camera"],
   ["my-designs", "My Designs", "saved local design documents drafts immutable versions Saraswati editor"],
   ["lower-thirds", "Lower thirds", "name title scripture strip lyrics strip band"],
   ["ticker", "News ticker", "crawl announcements scrolling"],
@@ -49,7 +50,6 @@ const LIBRARY: ReadonlyArray<readonly [LibrarySection, string, string]> = [
 /** The Live tools, each findable by name: OBS, scenes, cameras, timers, operators, screens, health. */
 const LIVE_TOOLS: ReadonlyArray<readonly [ProductionTab, string, string]> = [
   ["obs", "OBS", "obs stream streaming scenes switch record recording websocket"],
-  ["programs", "Scenes", "scenes program take layout congregation"],
   ["cameras", "Cameras", "cameras phone camera video feed"],
   ["timekeeper", "Timer", "timer timers timekeeper clock countdown hold late service time"],
   ["operators", "Operators", "operators desks crew phones paired take back control"],

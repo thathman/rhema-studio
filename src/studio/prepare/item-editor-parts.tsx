@@ -696,7 +696,7 @@ export function LookAndScene({ item, eventId, eventTitle }: { item: QueueItem; e
       {eventId && eventTitle && <SceneDesignPicker eventId={eventId} eventTitle={eventTitle} momentId={item.id} momentTitle={item.reference} onSceneSelected={setScene} />}
       {scenes.length === 0 && cameras.length === 0 && (
         <p className="text-muted-foreground">
-          {eventId ? "Choose from Design above to add a scene to this moment, or create a custom scene in Live → Scenes. Cameras are managed in Live → Production tools → Cameras." : "Scenes are made in Live → Production tools → Scenes, cameras in Live → Production tools → Cameras."}
+          {eventId ? "Choose from Design above to add a scene to this moment, or create a custom scene in Design → Scenes. Cameras are managed in Live → Production tools → Cameras." : "Scenes are made in Design → Scenes, cameras in Live → Production tools → Cameras."}
         </p>
       )}
     </section>
