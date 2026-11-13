@@ -142,14 +142,14 @@ export function SceneComposer() {
         <section aria-label="Scenes" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
           {prepareReturn ? (
             <>
-              <h3 className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Prepare scene copy</h3>
+              <h3 className="eyebrow">Prepare scene copy</h3>
               <p className="text-xs font-semibold">{prepareReturn.momentTitle}</p>
               <p className="text-xs text-muted-foreground">{prepareReturn.eventTitle}</p>
               <p className="rounded-md bg-tone-neutral px-2 py-1.5 text-xs text-tone-neutral-foreground">Draft for this service moment. It stays private until an operator Takes it in Live.</p>
             </>
           ) : (
             <>
-              <h3 className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Scenes</h3>
+              <h3 className="eyebrow">Scenes</h3>
               <ul className="flex flex-col gap-1">
                 {scenes.map((s) => (
                   <li key={s.id}>
@@ -220,7 +220,7 @@ export function SceneComposer() {
         </section>
 
         <section aria-label="Layer" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 text-xs">
-          <h3 className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Layer</h3>
+          <h3 className="eyebrow">Layer</h3>
           {draft && layer ? <Inspector layer={layer} onChange={(p) => editLayer(layer.id, p)} onOpenDesign={requestOpenPinnedDesign} hasPinnedDesign={!!draft.design} onRemove={() => { setDraft({ ...draft, layers: draft.layers.filter((l) => l.id !== layer.id) }); setLayerId(null) }} target={target} /> : <p className="text-muted-foreground">Select a layer in the preview or the list. Drag it to move it; drag its corner to resize; arrow keys nudge it.</p>}
         </section>
       </div>
@@ -265,7 +265,7 @@ function PrivateSceneBar({ context, congregation, target, onTarget, draft, dirty
 }) {
   return (
     <section aria-label="Private scene preview" className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs">
-      <span className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Private preview</span>
+      <span className="eyebrow">Private preview</span>
       {target ? (
         <>
           <label className="flex items-center gap-1.5 text-muted-foreground">
@@ -320,7 +320,7 @@ function NewFrom({ onNew }: { onNew: (p: ScenePreset) => void }) {
   const [renaming, setRenaming] = useState<string | null>(null)
   const [name, setName] = useState("")
   const item = "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs hover:bg-muted [&_svg]:size-3.5 [&_svg]:shrink-0"
-  const heading = "mt-1 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase"
+  const heading = "mt-1 eyebrow"
   return (
     <>
       <span className={heading}>New from</span>
@@ -837,7 +837,7 @@ function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onPr
   return (
     // The live console's own colours (dark ink, in every theme), from its tokens.
     <section aria-label="On the screen" className="dark present-surface flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs text-foreground">
-      <span className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preview output</span>
+      <span className="eyebrow">Preview output</span>
       <select aria-label="Scene preview output" value={target.id} onChange={(e) => onTarget(e.target.value)} className="h-8 rounded-md border border-input bg-secondary px-1.5 text-foreground">
         {congregation.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>

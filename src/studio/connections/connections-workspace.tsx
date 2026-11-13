@@ -39,7 +39,7 @@ function Card({ title, kicker, icon, count, children }: { title: string; kicker:
       <header className="flex items-start gap-3 border-b border-border bg-surface-elevated px-4 py-3">
         <span aria-hidden className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-kind-other text-kind-other-foreground [&_svg]:size-4">{icon}</span>
         <div className="min-w-0 flex-1">
-          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{kicker}</p>
+          <p className="eyebrow">{kicker}</p>
           <h2 className="text-sm font-bold">{title}</h2>
         </div>
         {count !== undefined && <span className="rounded-full bg-muted px-2 py-1 text-[0.625rem] font-bold tabular-nums text-muted-foreground">{count}</span>}
@@ -168,7 +168,7 @@ export function ConnectionsWorkspace() {
       <div className="mx-auto flex max-w-[1500px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Local network · same production</p>
+            <p className="eyebrow">Local network · same production</p>
             <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Connections</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Connect screens, cameras, volunteer devices and OBS on the church network. This computer keeps every service control and works on its own; other devices are optional.</p>
           </div>
@@ -177,7 +177,7 @@ export function ConnectionsWorkspace() {
 
         <section aria-labelledby="connections-nearby" className="rounded-lg border border-border bg-card p-4 shadow-panel">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div><p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Same church network</p><h2 id="connections-nearby" className="text-base font-bold">Nearby</h2></div>
+            <div><p className="eyebrow">Same church network</p><h2 id="connections-nearby" className="text-base font-bold">Nearby</h2></div>
             <Button size="sm" variant="outline" disabled={scanning} onClick={() => void findNearby()}><RefreshCwIcon /> {scanning ? "Searching…" : "Scan again"}</Button>
           </div>
           {scan.tvs === null && scan.hosts === null && !scanning ? (
@@ -205,7 +205,7 @@ export function ConnectionsWorkspace() {
         </section>
 
         <section aria-labelledby="connections-connected">
-          <div className="mb-3 flex items-end justify-between gap-3"><div><p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Current setup</p><h2 id="connections-connected" className="text-base font-bold">Connected</h2></div><span className="text-xs text-muted-foreground">Saved setup and live status, when the device reports it</span></div>
+          <div className="mb-3 flex items-end justify-between gap-3"><div><p className="eyebrow">Current setup</p><h2 id="connections-connected" className="text-base font-bold">Connected</h2></div><span className="text-xs text-muted-foreground">Saved setup and live status, when the device reports it</span></div>
           <div className="grid gap-4 xl:grid-cols-2">
             <Card title="Screens and TVs" kicker="Congregation · stage · signage" icon={<TvIcon />} count={savedTvs.length}>
               {savedTvs.length === 0 ? <p className="text-muted-foreground">No Google TV Receiver has been sent a feed yet. Display and NDI outputs can still be used on this computer.</p> : (
@@ -263,7 +263,7 @@ export function ConnectionsWorkspace() {
         </section>
 
         <section aria-labelledby="connections-issues" className="rounded-lg border border-border bg-card p-4 shadow-panel">
-          <div className="mb-3 flex items-center gap-2"><CircleAlertIcon aria-hidden className="size-4 text-muted-foreground" /><div><p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Recovery</p><h2 id="connections-issues" className="text-base font-bold">Issues</h2></div></div>
+          <div className="mb-3 flex items-center gap-2"><CircleAlertIcon aria-hidden className="size-4 text-muted-foreground" /><div><p className="eyebrow">Recovery</p><h2 id="connections-issues" className="text-base font-bold">Issues</h2></div></div>
           {issues.length === 0 ? <p className="text-xs text-muted-foreground">{hostChecked ? "Nothing needs attention. This computer remains ready to run a service by itself." : "Checking devices. Optional devices can disconnect without stopping the service on this computer."}</p> : (
             <ul aria-label="Connection issues" className="flex flex-col divide-y divide-border">
               {issues.map((issue, index) => <li key={`${issue.text}-${index}`} className="flex flex-wrap items-center gap-3 py-2 first:pt-0 last:pb-0"><CircleAlertIcon aria-hidden className="size-4 shrink-0 text-confidence-mid" /><span className="min-w-0 flex-1">{issue.text}</span>{issue.action}</li>)}

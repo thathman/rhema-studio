@@ -46,7 +46,7 @@ export function RunChronologyPage({ runId, onBack }: { runId: string; onBack: ()
       {run && run !== "missing" && (
         <>
           <header>
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Service chronology</p>
+            <p className="eyebrow">Service chronology</p>
             <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">{run.title}</h1>
             <p className="mt-1 text-xs text-muted-foreground">
               {[run.service_date, run.status === "finished" ? "Finished run" : run.status === "interrupted" ? "Interrupted run" : "Active run", `started ${when(run.started_at, run.time_zone)}`, run.finished_at ? `finished ${when(run.finished_at, run.time_zone)}` : null, run.time_zone ? `times in ${run.time_zone}` : null].filter(Boolean).join(" · ")}

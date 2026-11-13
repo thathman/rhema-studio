@@ -84,7 +84,7 @@ function Card({ title, kicker, badge, children, className }: { title: string; ki
     <section className={cn("flex min-w-0 flex-col rounded-lg border border-border bg-card", className)} aria-label={title}>
       <header className="flex items-start justify-between gap-2 border-b border-border bg-surface-elevated px-[15px] py-3">
         <div className="min-w-0">
-          {kicker && <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{kicker}</p>}
+          {kicker && <p className="eyebrow">{kicker}</p>}
           <h2 className="text-sm font-bold tracking-[-0.02em]">{title}</h2>
         </div>
         {badge}
@@ -117,7 +117,7 @@ export function ProductionWorkspace({ embedded = false, expanded = false }: { em
         {!embedded && (
           <header className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">One service · production control</p>
+              <p className="eyebrow">One service · production control</p>
               <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Production control</h1>
               <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Monitoring only reads device status. Scene edits and OBS preview stay private until the relevant Take. Taking a scene changes the selected room display; switching in OBS changes the online stream. In rehearsal, scene Takes do not reach room displays and OBS program switches are blocked.</p>
             </div>

@@ -96,7 +96,7 @@ function Card({ title, kicker, badge, children, className }: { title: string; ki
     <section aria-label={title} className={cn("flex flex-col gap-3 rounded-lg border border-border bg-card p-4 text-xs", className)}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{kicker}</p>
+          <p className="eyebrow">{kicker}</p>
           <h3 className="text-sm font-bold">{title}</h3>
         </div>
         {badge}

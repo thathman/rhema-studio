@@ -115,7 +115,7 @@ export function BibleConsole({ live }: { live: LiveStateV1 }) {
       )}
       {passage && (
         <div role="group" aria-label="Preview on this desk" className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/40 p-2">
-          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preview here only · {passage.reference} {abbreviation}</p>
+          <p className="eyebrow">Preview here only · {passage.reference} {abbreviation}</p>
           {passage.verses.map((v) => <p key={v.verse} className={cn(v.verse !== passage.verse && "text-muted-foreground")}><sup className="mr-1 tabular-nums">{v.verse}</sup>{v.text}</p>)}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={!ok} onClick={() => activate(passage.reference)}>Activate {passage.reference}</Button>

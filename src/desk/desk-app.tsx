@@ -38,7 +38,7 @@ function Centered({ children }: { children: React.ReactNode }) {
   )
 }
 
-const Kicker = ({ children }: { children: React.ReactNode }) => <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{children}</p>
+const Kicker = ({ children }: { children: React.ReactNode }) => <p className="eyebrow">{children}</p>
 
 /** Opened over plain http while the host runs its secure page: the desk is used only there. */
 function SecureFirst() {

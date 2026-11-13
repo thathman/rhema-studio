@@ -386,7 +386,7 @@ export function LibraryWorkspace() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 px-[29px] pt-[26px] pb-4 max-[1200px]:px-5">
         <div className="min-w-0">
-          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Everything in its place</p>
+          <p className="eyebrow">Everything in its place</p>
           <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Your creative library.</h1>
           <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
             {section === "designs"
@@ -407,7 +407,7 @@ export function LibraryWorkspace() {
       {section !== "designs" && (
         <div className="mx-[29px] mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 max-[1200px]:mx-5">
           <div className="min-w-0">
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{contextualDestination ? "Contextual Add" : "Add destination"}</p>
+            <p className="eyebrow">{contextualDestination ? "Contextual Add" : "Add destination"}</p>
             <p className="mt-1 truncate text-sm font-semibold">{contextualDestination ?? `Open service · ${currentService?.title || "Local draft"}`}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {contextualDestination

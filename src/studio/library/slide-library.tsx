@@ -204,7 +204,7 @@ export function SlideLibrary({ onUseItem, newRequest = 0 }: { onUseItem?: Librar
       <section className="flex min-h-0 flex-col overflow-y-auto rounded-lg border border-border bg-background p-4" aria-label="Reusable slide details">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{editing ? "Reusable source" : "New reusable source"}</p>
+            <p className="eyebrow">{editing ? "Reusable source" : "New reusable source"}</p>
             <h2 className="mt-1 text-base font-semibold">{editing ? "Edit library content" : "Create a slide"}</h2>
           </div>
           {editing && <Button size="sm" disabled={busy || sourceHasUncommittedEdits} onClick={addToService}>Add to service</Button>}

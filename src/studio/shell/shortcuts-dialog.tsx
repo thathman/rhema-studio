@@ -16,7 +16,7 @@ export function ShortcutsDialog({ open, onOpenChange, onCloseAutoFocus }: { open
         </DialogHeader>
         {GROUPS.map(([title, rows]) => (
           <section key={title} aria-label={title} className="flex flex-col gap-1.5">
-            <h3 className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{title}</h3>
+            <h3 className="eyebrow">{title}</h3>
             {rows.map(([keys, what]) => (
               <div key={keys} className="flex items-baseline gap-3 text-xs">
                 <kbd className="w-36 shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem]">{keys}</kbd>

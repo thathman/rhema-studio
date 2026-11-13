@@ -32,7 +32,7 @@ export function LibraryPreviewPane({ onAdd }: { onAdd: (item: QueueItem) => void
     <section aria-label="Library preview" className="mt-3 flex shrink-0 flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3">
       {url && inspected.item.kind === "image" && <img src={url} alt="" className="h-16 w-28 rounded object-cover" />}
       <div className="min-w-0 flex-1">
-        <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Library preview · not on Live</p>
+        <p className="eyebrow">Library preview · not on Live</p>
         <p className="truncate text-sm font-semibold">{inspected.title}</p>
         {inspected.detail && <p className="truncate text-xs text-muted-foreground">{inspected.detail}</p>}
       </div>
