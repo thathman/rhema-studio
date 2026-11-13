@@ -442,10 +442,15 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
 const fadeRegions = new WeakMap<HTMLCanvasElement, Rect>()
 
 /**
- * The part of the frame a layer paints into, in the layer's own (unturned) space: its box, or for
- * text that widens past its box (`textWiden`), the widened block (same height).
+ * The part of the frame a layer paints into, in the layer's own (unturned) space: its box, a shape
+ * with its outline, or for text that widens past its box (`textWiden`), the widened block (same height).
  */
 function paintRegion(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: Rect, height: number, span: FrameSpan): Rect {
+  // A shape's outline is centred on its edge: half of it lies outside the box (#448).
+  if (l.outline && (l.kind === "color" || l.kind === "ellipse")) {
+    const half = Math.ceil((l.outline.width * height) / 1080 / 2) + 1
+    return { x: Math.floor(r.x) - half, y: Math.floor(r.y) - half, w: Math.ceil(r.w) + 2 * half + 1, h: Math.ceil(r.h) + 2 * half + 1 }
+  }
   if (l.kind !== "text" || !l.text || !widening(l)) return r
   ctx.save()
   const { left, width } = staticTextLayout(ctx, l, r, height, span)

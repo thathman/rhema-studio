@@ -6,7 +6,7 @@ import { applyCommand, buildRenderCommands } from "@/vendor/avnac/saraswati"
 import { canvas2DRendererBackend } from "@/vendor/avnac/renderer/backends/canvas2d/renderer"
 import { designToScene, sceneToDesign } from "@/design-engine/rhema-scene"
 import { normalizeScene, sceneFrame } from "@/lib/scenes"
-import { drawScene } from "@/lib/scene-renderer"
+import { drawScene, LayerFader } from "@/lib/scene-renderer"
 import type { Scene, SceneGradient, SceneLayer } from "@/types"
 
 /**
@@ -216,5 +216,22 @@ describe("gradient paint outside the editor (review of #656)", () => {
     expect(recoloured.backgroundGradient).toBeUndefined()
     expect(recoloured.layers.find((l) => l.id === "panel")?.gradient).toBeUndefined()
     expect(recoloured.layers.find((l) => l.id === "halo")?.gradient).toEqual(painted.layers[1]!.gradient)
+  })
+
+  it("a joined desk's save keeps a shape's outline and corners, which it cannot set (#448)", async () => {
+    const { mergeDeskScene, sceneForDesk } = await import("@/lib/desk-scenes")
+    const edged: Scene = { ...painted, layers: [layer("card", "color", { color: "#3157a4", corner: 40, outline: { color: "#ffffff", width: 6 }, box: { x: 10, y: 10, w: 30, h: 30 } })] }
+    const sent = JSON.parse(JSON.stringify(sceneForDesk(edged, false)))
+    const moved = mergeDeskScene({ ...sent, layers: sent.layers.map((l: SceneLayer) => ({ ...l, box: { ...l.box, x: 20 }, outline: { color: "#ff0000", width: 50 }, corner: 1 })) }, edged, { cameras: new Set(), themes: new Set() })!
+    expect(moved.layers[0]).toMatchObject({ box: { x: 20 }, corner: 40, outline: { color: "#ffffff", width: 6 } })
+  })
+
+  it("a fading shape keeps the outer half of its outline (#448)", () => {
+    const edged: Scene = { ...painted, backgroundGradient: undefined, layers: [layer("card", "color", { color: "#3157a4", outline: { color: "#ffffff", width: 20 }, fadeMs: 300, box: { x: 10, y: 10, w: 30, h: 30 } })] }
+    const canvas = createCanvas(1920, 1080)
+    const fader = new LayerFader(() => createCanvas(1, 1) as unknown as HTMLCanvasElement, () => 10_000)
+    drawScene(ctxOf(canvas), 1920, 1080, frameOf(edged), { image: () => null, layerCanvas: () => createCanvas(1, 1) as unknown as HTMLCanvasElement, fader })
+    // 8 px outside the top edge (y = 108) is still the outline's white.
+    expect(near(pixel(canvas, 1920 * 0.25, 108 - 8), WHITE)).toBe(true)
   })
 })
