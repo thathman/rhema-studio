@@ -1,6 +1,8 @@
 // Native Tauri acceptance scenario for #405 and #406: Home's Next, its Sunday summary and its readiness
 // counter in the real desktop app. Next skips hidden items and items in a skipped phase, exactly as Live
 // does; the summary says why an item is skipped; the counter is "Service readiness", not "Content".
+// Then #401: Find anything → Go to → Connections opens the Connections hub; and #386: a successful
+// Add item closes the picker and opens the new item in Prepare's editor.
 const waitFor = async (predicate, label, timeoutMs = 5000) => {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -75,7 +77,37 @@ async function runScenario() {
     qa.queue.setState({ items: [a, b, c, d].map((item) => ({ ...item, hidden: true })), activeIndex: null })
     const empty = await waitFor(() => [...document.querySelectorAll('section[aria-labelledby="glance"] [role="status"]')].find((el) => normal(el.innerText).includes("nothing is scheduled to present")), "all-skipped notice")
 
-    return { rows, readiness, allSkipped: normal(empty.innerText) }
+    stage = "Find anything → Go to → Connections (#401)"
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))
+    const find = await waitFor(() => document.querySelector('[cmdk-input]'), "the Find anything box")
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(find, "connections")
+    find.dispatchEvent(new Event("input", { bubbles: true }))
+    const goTo = await waitFor(() => [...document.querySelectorAll("[cmdk-item]")].find((el) => normal(el.innerText) === "Connections"), "Go to → Connections")
+    goTo.click()
+    await waitFor(() => [...document.querySelectorAll("h1, h2")].some((h) => normal(h.innerText) === "Connections"), "the Connections hub")
+    const findClosed = await waitFor(() => !document.querySelector('[cmdk-input]'), "Find anything closed")
+
+    stage = "Add item closes the picker and opens the new item (#386)"
+    qa.queue.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
+    await clickButton("Prepare")
+    await clickButton("Add item")
+    await waitFor(() => document.querySelector('[role="dialog"]'), "the Add picker")
+    // The picker's own Slides tab (Prepare's item editor has one too).
+    const slidesTab = await waitFor(() => [...document.querySelectorAll('[role="dialog"] button, [role="dialog"] [role=tab]')].find((b) => normal(b.innerText) === "Slides"), "the picker's Slides tab")
+    // A tab switches on mouse-down (Radix), not on click.
+    slidesTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
+    await sleep(100)
+    const words = "QA native added slide"
+    const box = await waitFor(() => [...document.querySelectorAll('[role="dialog"] textarea')].find((t) => (t.getAttribute("placeholder") ?? "").startsWith("What goes on screen")), "the slide words box")
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(box, words)
+    box.dispatchEvent(new Event("input", { bubbles: true }))
+    await clickButton("Add to service")
+    await waitFor(() => !document.querySelector('[role="dialog"]'), "the picker closed after Add")
+    const added = qa.queue.getState().items
+    if (added.length !== 1) throw new Error(`Add did not put exactly one item in the service: ${added.length}`)
+    await waitFor(() => [...document.querySelectorAll("h1, h2, h3")].some((h) => normal(h.innerText) === words), "the new item open in the editor")
+
+    return { rows, readiness, allSkipped: normal(empty.innerText), connections: findClosed, addedId: added[0].id }
   } catch (error) {
     throw new Error(JSON.stringify({
       stage,
