@@ -1,4 +1,5 @@
 import { BellIcon } from "lucide-react"
+import { SetAsideNotices } from "@/studio/shell/set-aside-notices"
 import {
   Popover,
   PopoverContent,
@@ -103,6 +104,7 @@ export function HostNotices({ compact = false }: { compact?: boolean }) {
         align={compact ? "start" : "end"}
         className="w-96 max-w-[calc(100vw-2rem)]"
       >
+        <SetAsideNotices />
         <p className="mb-2 text-sm font-semibold">Production notices</p>
         <NoticesPanel
           notices={notices}
