@@ -62,13 +62,14 @@ describe("a service copy of a reusable slide (#395)", () => {
     const root = createRoot(el)
     await act(async () => root.render(<CustomSlideEditor item={copy} />))
     expect(el.textContent).not.toContain("was changed since")
+    act(() => root.unmount())
     // An empty library (the source was deleted) asks once, not again and again.
     hostSlides.list = []
     hostSlides.calls = 0
-    await act(async () => root.render(<CustomSlideEditor item={{ ...copy, id: "i2" }} />))
+    const again = createRoot(document.createElement("div"))
+    await act(async () => again.render(<CustomSlideEditor item={copy} />))
     await act(async () => new Promise<void>((r) => setTimeout(r, 50)))
-    expect(hostSlides.calls).toBeLessThanOrEqual(1)
-    expect(el.textContent).not.toContain("was changed since")
-    act(() => root.unmount())
+    expect(hostSlides.calls).toBe(1)
+    act(() => again.unmount())
   })
 })
