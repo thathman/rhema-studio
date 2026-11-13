@@ -94,7 +94,8 @@ fn private_host(l: &str) -> bool {
     let host = rest.split(['/', '?', '#']).next().unwrap_or("");
     let host = host.rsplit('@').next().unwrap_or(host);
     let host = if host.starts_with('[') { host.split(']').next().unwrap_or(host).trim_start_matches('[') } else { host.split(':').next().unwrap_or(host) };
-    if host == "localhost" || host.ends_with(".local") || host.ends_with(".localhost") { return true }
+    // The address is lowercased already; its last label says whether it is on this network.
+    if matches!(host.rsplit('.').next(), Some("localhost" | "local")) { return true }
     match host.parse::<std::net::IpAddr>() {
         Ok(std::net::IpAddr::V4(ip)) => ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified(),
         Ok(std::net::IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unspecified() || (ip.segments()[0] & 0xfe00) == 0xfc00 || (ip.segments()[0] & 0xffc0) == 0xfe80,
