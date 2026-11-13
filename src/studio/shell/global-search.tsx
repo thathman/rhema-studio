@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PlusIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, UsersIcon, ShieldCheckIcon, CableIcon } from "lucide-react"
+import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PlusIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, ShieldCheckIcon, CableIcon } from "lucide-react"
 import { useState } from "react"
 import { defaultFilter } from "cmdk"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -16,10 +16,9 @@ const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string
   ["present", "Live", <PlayIcon key="i" />, "live console present show go live"],
   ["library", "Library", <LibraryBigIcon key="i" />, "songs hymns bible slides media files"],
   ["design", "Design", <PaletteIcon key="i" />, "themes looks studio"],
-  ["permissions", "Permissions", <ShieldCheckIcon key="i" />, "paired devices roles access approval requests"],
+  ["permissions", "People & access", <ShieldCheckIcon key="i" />, "permissions paired devices roles access approval requests team people comments church folder operator name"],
   ["connections", "Connections", <CableIcon key="i" />, "tvs receivers camera phones remotes obs computers pairing nearby devices discover"],
   ["archive", "History", <ArchiveIcon key="i" />, "past services execution records logs"],
-  ["team", "Team", <UsersIcon key="i" />, "team approvals comments church folder remote"],
 ]
 
 const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [

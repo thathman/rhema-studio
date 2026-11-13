@@ -13,6 +13,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { ApprovalRequestsPanel } from "./approval-requests-panel"
 import { MyApprovalRequests } from "./my-approval-requests"
 import { RevokeAction } from "@/studio/connections/revoke-action"
+import { TeamSections } from "@/studio/team/team-workspace"
 
 const dateWords = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
 
@@ -125,9 +126,8 @@ export function PermissionsWorkspace() {
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="eyebrow">Your church · main computer decisions</p>
-            <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Permissions</h1>
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Review changes from joined desks and manage what paired devices can do. Only the main computer can approve or change access.</p>
+            <h1 className="text-2xl leading-tight font-semibold tracking-tight">People &amp; access</h1>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Who works on the service, what joined desks and paired devices may do, and changes waiting for the main computer. Only the main computer can approve or change access.</p>
           </div>
         </header>
 
@@ -267,6 +267,8 @@ export function PermissionsWorkspace() {
           </dl>
           </section>
         </>}
+
+        <TeamSections />
       </div>
     </div>
   )

@@ -62,7 +62,7 @@ const savedPrefs = () => JSON.parse(saved.get(SHELL_PREFS_KEY) ?? "{}") as { sid
 
 describe("the collapsible sidebar", () => {
   it("opens Permissions from the church navigation", async () => {
-    await act(async () => navButton("Permissions").click())
+    await act(async () => navButton("People & access").click())
     expect(selectedWorkspace).toBe("permissions")
   })
 
@@ -128,7 +128,7 @@ describe("the collapsible sidebar", () => {
     expect(document.querySelector("[role='tooltip']")).toBeNull()
 
     await act(async () => useShellStore.getState().setSidebarCollapsed(true))
-    for (const label of ["Home", "Prepare", "Live", "Library", "Design", "History", "Team"]) {
+    for (const label of ["Home", "Prepare", "Live", "Library", "Design", "History", "People & access"]) {
       const b = navButton(label)
       expect(b.querySelector(".compact\\:sr-only")?.textContent).toBe(label)
       expect(b.title).toBe("")

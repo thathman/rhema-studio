@@ -20,7 +20,6 @@ import { SettingsPage } from "@/components/settings-dialog"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { LibraryWorkspace } from "@/studio/library/library-workspace"
 import { ArchiveWorkspace } from "@/studio/archive/archive-workspace"
-import { TeamWorkspace } from "@/studio/team/team-workspace"
 import { ConnectionsWorkspace } from "@/studio/connections/connections-workspace"
 import { openSettings } from "@/lib/settings-dialog"
 import { Sidebar } from "@/studio/shell/sidebar"
@@ -60,7 +59,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { REMOTE_EVENTS, REMOTE_REQUEST_WITHDRAWN_EVENT, REMOTE_STAGE_SEND_REQUEST_EVENT } from "@/lib/remote-events"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", permissions: "Permissions", connections: "Connections", team: "Team", archive: "History", settings: "Settings" }
+const TITLES: Record<Workspace, string> = { home: "Home", prepare: "Prepare", present: "Live", production: "Live", library: "Library", design: "Design", permissions: "People & access", connections: "Connections", team: "People & access", archive: "History", settings: "Settings" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -73,7 +72,7 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   production: () => <PresentWorkspace />,
   connections: () => <ConnectionsWorkspace />,
   permissions: () => <PermissionsWorkspace />,
-  team: () => <TeamWorkspace />,
+  team: () => <PermissionsWorkspace />,
   settings: () => <SettingsPage />,
 }
 

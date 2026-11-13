@@ -91,7 +91,7 @@ describe("keyboard order (#215)", () => {
       </>,
     )
     await act(async () => document.querySelector<HTMLButtonElement>("button")!.focus())
-    expect(await walk(13)).toEqual(["Home", "Prepare", "Live", "Library", "Design", "History", "Permissions", "Connections", "Team", "Settings",
+    expect(await walk(12)).toEqual(["Home", "Prepare", "Live", "Library", "Design", "History", "People & access", "Connections", "Settings",
       "Collapse sidebar", "Your desk: Tolu, Main computer", "After"])
     // And back the same way.
     await tab(true)
