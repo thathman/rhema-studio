@@ -193,21 +193,6 @@ function layerEntries(scene: SaraswatiScene, issues: DesignIssue[] = [], rootId 
   return out
 }
 
-function groupNodesUnder(scene: SaraswatiScene, rootId: string): SaraswatiGroupNode[] {
-  const groups: SaraswatiGroupNode[] = []
-  const seen = new Set<string>()
-  const walk = (id: string) => {
-    if (seen.has(id)) return
-    seen.add(id)
-    const node = scene.nodes[id]
-    if (!node || node.type !== "group") return
-    groups.push(node)
-    if (Array.isArray(node.children)) node.children.forEach(walk)
-  }
-  walk(rootId)
-  return groups
-}
-
 function pageIssues(design: RhemaDesign): DesignIssue[] {
   if (design.pages === undefined) return []
   const issues: DesignIssue[] = []
@@ -294,13 +279,10 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
   } else if (artboardBg.type !== "solid" && artboardBg.type !== "gradient") {
     issues.push({ nodeId: "__artboard__", message: "This background paint cannot be drawn on Rhema outputs" })
   }
-  for (const node of groupNodesUnder(design.scene, pageRoot)) {
-    // A faded group (#448) is saved: the editor fades each of its layers by the group's opacity
-    // (saraswati/scene.ts listSaraswatiNodesInRenderOrder), and so does every output.
-    if (Math.abs(node.rotation ?? 0) > 0.0001) {
-      issues.push({ nodeId: node.id, message: "Group rotation cannot be saved into a Rhema scene yet" })
-    }
-  }
+  // A faded or turned group is saved (#448): the editor fades each of its layers by the group's
+  // opacity (saraswati/scene.ts, listSaraswatiNodesInRenderOrder) and turning a group turns each of
+  // its layers (commands/reducer.ts, rotateGroupNode), leaving the group's own angle as a record it
+  // never draws. Outputs do the same: each layer with its own opacity and turn.
   for (const { node, visible, groupOpacity } of layerEntries(design.scene, issues, pageRoot)) {
     const binding = design.bindings[node.id]
     if (!binding) {

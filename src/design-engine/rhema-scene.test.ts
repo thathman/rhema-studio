@@ -77,10 +77,8 @@ describe("Rhema scenes in the Avnac engine", () => {
     }
 
     const selected = designToScene(multiPage, pageTwo.id)
-    // One layer in a faded page: fading the layer looks the same (#448). Its turn is still refused.
-    expect(selected.issues).toEqual([
-      { nodeId: pageTwo.id, message: "Group rotation cannot be saved into a Rhema scene yet" },
-    ])
+    // A faded, turned page: its layer is faded by it; the page's own angle is a record the editor never draws (#448).
+    expect(selected.issues).toEqual([])
     expect(selected.scene.layers[0]?.opacity).toBeCloseTo(pageTwo.opacity * second.opacity, 3)
     expect(selected.scene.layers).toEqual([expect.objectContaining({ id: "second", kind: "text", text: "Second page" })])
     expect(designToScene(multiPage, pageOne.id).issues).toEqual([])
@@ -227,9 +225,7 @@ describe("Rhema scenes in the Avnac engine", () => {
     const byId = Object.fromEntries(saved.layers.map((item) => [item.id, item]))
     expect(byId.cam.visible).toBe(false)
     expect(byId.verse.visible).toBe(false)
-    expect(issues).toEqual(expect.arrayContaining([
-      { nodeId: group.id, message: "Group rotation cannot be saved into a Rhema scene yet" },
-    ]))
+    expect(issues.filter((i) => i.nodeId === group.id)).toEqual([])
   })
 
   it("saves a turned, cropped picture with its turn and its crop (#851 G7)", () => {
@@ -303,6 +299,11 @@ describe("picture crop and clipping (#448 Slice B)", () => {
     const out = designToScene({ ...d2, scene: { ...d2.scene, nodes: { ...d2.scene.nodes, [r2.id]: { ...r2, opacity: 0.5 } } } })
     expect(out.issues).toEqual([])
     expect(out.scene.layers.map((l) => [l.id, l.opacity])).toEqual([["a", 0.4], ["b", 0.5]])
+    // Turning a group turns each of its layers, as the editor does; the group's angle is not drawn.
+    const turned = applyCommand({ ...d2.scene, nodes: { ...d2.scene.nodes, g: { id: "g", type: "group", parentId: r2.id, visible: true, opacity: 1, rotation: 0, children: ["a", "b"] }, a: { ...d2.scene.nodes.a, parentId: "g" }, b: { ...d2.scene.nodes.b, parentId: "g" }, [r2.id]: { ...r2, children: ["g"] } } } as never, { type: "ROTATE_NODE", id: "g", rotation: 30 })
+    const saved = designToScene({ ...d2, scene: turned })
+    expect(saved.issues).toEqual([])
+    expect(saved.scene.layers.map((l) => l.rotation)).toEqual([30, 30])
     // Out of range is clamped as the editor clamps it.
     const over = designToScene({ ...d2, scene: { ...d2.scene, nodes: { ...d2.scene.nodes, [r2.id]: { ...r2, opacity: 1.5 } } } })
     expect(over.scene.layers.map((l) => l.opacity)).toEqual([0.8, 1])
