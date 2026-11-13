@@ -134,7 +134,20 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 aria-selected={mode === "prepare" && picked.length > 1 ? inPick : undefined}
                 onClick={(e) => (mode === "prepare" ? pick(item, e) : preview(item))}
                 onDoubleClick={mode === "present" ? () => present(item, index) : undefined}
-                title={mode === "present" ? (audio ? "Click to preview, double-click to play audio on this computer; screens stay unchanged" : cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to open it in the editor; Live's Preview stays as it is"}
+                // Alt+↑/↓ moves it in Prepare without a mouse (#444), within its own phase, event or group:
+                // it stops at a header rather than slipping into the next section (Move to phase and drag
+                // cross sections). Focus stays on the moved row.
+                onKeyDown={mode === "prepare" ? (e) => {
+                  if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return
+                  e.preventDefault()
+                  const up = e.key === "ArrowUp"
+                  const other = items[index + (up ? -1 : 1)]
+                  if (!other || headers.some((h) => h.at === (up ? index : index + 1))) return
+                  const row = e.currentTarget
+                  useQueueStore.getState().moveItemsToTarget([item.id], { kind: e.key === "ArrowUp" ? "before" : "after", itemId: other.id })
+                  requestAnimationFrame(() => row.focus())
+                } : undefined}
+                title={mode === "present" ? (audio ? "Click to preview, double-click to play audio on this computer; screens stay unchanged" : cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to open it in the editor; Live's Preview stays as it is. Alt+↑/↓ moves it within its section"}
               >
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
                 {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={songLabel.startsWith("Hymn") ? "Hymn" : "Song"} />}
