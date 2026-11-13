@@ -14,7 +14,7 @@ pub(super) fn tools() -> Vec<Value> {
     let ro = json!({ "readOnlyHint": true, "destructiveHint": false, "openWorldHint": false });
     let design = json!({ "type": "object", "description": "A proposed design: { title, kind?, background?, pages: [ { title, layers: [ … ] } ] } (rhema_get_design_capabilities has the layer fields)." });
     vec![
-        json!({ "name": "rhema_get_design_capabilities", "description": "What a design proposed here may hold, so Rhema's screens draw it exactly as the Design editor shows it: 1920×1080 pages of text (both service languages), rectangles and ellipses (solid or linear-gradient fills) and pictures from the church's media library by id, with the limits and what is refused and why.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro }),
+        json!({ "name": "rhema_get_design_capabilities", "description": "What a design proposed here may hold, so Rhema's screens draw it exactly as the Design editor shows it: 1920×1080 pages of text (both service languages), rectangles and ellipses (solid or linear-gradient fills, outlines, rounded corners) and pictures from the church's media library by id, with the limits and what is refused and why.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro }),
         json!({ "name": "rhema_list_designs", "description": "The church's designs in Rhema Studio → Design (newest change first): id, title, kind, draft revision and latest saved version. No documents.", "inputSchema": { "type": "object", "properties": { "query": { "type": "string", "description": "words in the title" }, "limit": { "type": "integer", "minimum": 1, "maximum": super::MAX_LIST } } }, "annotations": ro }),
         json!({ "name": "rhema_validate_design_draft", "description": "Check a proposed design without saving it: every page and layer, the fills and fonts, both languages' words and that each picture is in the media library. Returns errors (with where each is), warnings and what would be made.", "inputSchema": { "type": "object", "properties": { "design": design }, "required": ["design"] }, "annotations": ro }),
         json!({ "name": "rhema_get_design", "description": "One design from rhema_list_designs: its title, kind, draft revision, latest version, whether an assistant may still revise it, and the editor's document (pages and layers as Rhema stores them).", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] }, "annotations": ro }),
@@ -31,12 +31,14 @@ fn capabilities() -> Value {
         "fill": [ { "type": "solid", "color": "#rrggbb" }, { "type": "gradient", "angle": "degrees, -360–360 (0 bottom to top, 90 left to right)", "stops": "2–16 of { color: #rrggbb or #rrggbbaa, offset: 0–1, in order }" } ],
         "layers": {
             "text": { "common": common, "height": "box height px (default one line)", "text": format!("the words in the first service language, up to {} characters; \\n breaks a line", proposal::MAX_TEXT_CHARS), "textSecond": "the same words in the second service language (expected when the church has two)", "fontSize": "8–400, default 64", "fontFamily": "a font name (default Arial); the Brand Kit's fonts are in rhema_get_church_profile", "fontWeight": "\"400\"–\"900\", default \"600\"", "fontStyle": "normal or italic", "textAlign": "left, center (default) or right", "lineHeight": "0.5–3, default 1.2", "color": "#rrggbb, default #ffffff", "underline": "true or false" },
-            "rect": { "common": common, "height": "px", "fill": "a fill" },
-            "ellipse": { "common": common, "height": "px", "fill": "a fill" },
+            "rect": { "common": common, "height": "px", "fill": "a fill", "outline": "optional { color: #rrggbb, width: 0.5–200 px }, drawn centred on the edge", "corner": "optional rounded corners, 0–540 px" },
+            "ellipse": { "common": common, "height": "px", "fill": "a fill", "outline": "optional { color: #rrggbb, width: 0.5–200 px }, drawn centred on the edge" },
             "picture": { "common": common, "height": "px", "mediaId": "a picture's id from rhema_list_media; screens fill the box keeping its shape" },
         },
         "refused": [
-            "lines, arrows, polygons and stars; rotation, flipping, shadow, blur, outlines and rounded corners: Rhema's screens do not draw them yet",
+            "lines, arrows, polygons and stars; flipping, shadow and blur: Rhema's screens do not draw them yet",
+            "rotation: people turn layers in the Design editor after the draft is saved",
+            "outlines on text or pictures, gradient outlines, rounded corners on ellipses or pictures",
             "gradient or non-hex text colours",
             "pictures by address (web, file or data URLs): only the media library, by id",
             "crops and masks: people add them in the Design editor",

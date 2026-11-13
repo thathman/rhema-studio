@@ -79,8 +79,11 @@ fn allowed(kind: &str) -> &'static [&'static str] {
             "color",
             "underline",
         ],
-        "rect" | "ellipse" => &[
-            "type", "name", "x", "y", "width", "height", "opacity", "fill",
+        "rect" => &[
+            "type", "name", "x", "y", "width", "height", "opacity", "fill", "outline", "corner",
+        ],
+        "ellipse" => &[
+            "type", "name", "x", "y", "width", "height", "opacity", "fill", "outline",
         ],
         "picture" => &[
             "type", "name", "x", "y", "width", "height", "opacity", "mediaId",
@@ -96,11 +99,18 @@ fn refusal(field: &str) -> String {
         "rotation" => "rotation is set by people in the Design editor after the draft is saved; leave it out".into(),
         "scaleX" | "scaleY" => "flipping is not drawn on Rhema outputs yet; leave it out".into(),
         "shadow" | "blur" => "shadow and blur are not drawn on Rhema outputs yet; leave it out".into(),
-        "stroke" | "strokeWidth" | "radius" | "radiusX" | "radiusY" | "borderRadius" => "outlines and rounded corners are not drawn on Rhema outputs for this layer yet; leave it out".into(),
+        "stroke" | "strokeWidth" | "radius" | "radiusX" | "radiusY" | "borderRadius" => "outlines and rounded corners are given as `outline: { color, width }` (a rectangle or ellipse) and `corner` (a rectangle); other layers have neither".into(),
+        "outline" | "corner" => "only rectangles have rounded corners, and only rectangles and ellipses have outlines".into(),
         "src" | "url" | "imageUrl" | "href" => "pictures come only from the church's media library: give its mediaId (rhema_list_media), never an address".into(),
         "clipPath" | "crop" | "cropX" | "cropY" => "crops and masks are made by people in the Design editor; leave it out".into(),
         _ => format!("\"{field}\" is not part of a design layer (see rhema_get_design_capabilities)"),
     }
+}
+
+/// A number as JSON, whole numbers without a fraction (as the editor writes them).
+#[allow(clippy::cast_possible_truncation)]
+fn whole(n: f64) -> Value {
+    if n.fract() == 0.0 && n.abs() < 1e9 { json!(n as i64) } else { json!(n) }
 }
 
 fn hex6(s: &str) -> bool {
@@ -345,11 +355,31 @@ fn layer(
                 ("width".into(), json!(width)),
                 ("height".into(), json!(height)),
                 ("fill".into(), fill),
-                ("stroke".into(), Value::Null),
-                ("strokeWidth".into(), json!(0)),
             ]);
+            // An outline (#448): a solid #rrggbb, 0.5–200 px, centred on the edge as outputs draw it.
+            let (stroke, stroke_width) = match o.get("outline") {
+                None => (Value::Null, 0.0),
+                Some(Value::Object(line)) => {
+                    let at = format!("{path}.outline");
+                    let color = line.get("color").and_then(Value::as_str).filter(|c| hex6(c));
+                    if color.is_none() {
+                        ctx.err(&format!("{at}.color"), "an outline colour must be #rrggbb");
+                    }
+                    let width = num(ctx, line, &at, "width", 0.5, 200.0, None);
+                    if let Some(extra) = line.keys().find(|k| *k != "color" && *k != "width") {
+                        ctx.err(&format!("{at}.{extra}"), "an outline has only a color and a width");
+                    }
+                    (color.map_or(Value::Null, |c| json!({ "type": "solid", "color": c })), if color.is_some() { width } else { 0.0 })
+                }
+                Some(_) => {
+                    ctx.err(&format!("{path}.outline"), "an outline is { color: \"#rrggbb\", width: 0.5–200 }");
+                    (Value::Null, 0.0)
+                }
+            };
+            node.extend([("stroke".into(), stroke), ("strokeWidth".into(), whole(stroke_width))]);
             if kind == "rect" {
-                node.extend([("radiusX".into(), json!(0)), ("radiusY".into(), json!(0))]);
+                let corner = num(ctx, o, path, "corner", 0.0, 540.0, Some(0.0));
+                node.extend([("radiusX".into(), whole(corner)), ("radiusY".into(), whole(corner))]);
             }
             json!({ "id": id, "kind": if kind == "rect" { "color" } else { "ellipse" }, "color": fallback })
         }

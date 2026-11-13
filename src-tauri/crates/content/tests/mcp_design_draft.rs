@@ -313,3 +313,27 @@ fn an_assistant_revises_only_its_own_untouched_unversioned_draft_at_the_revision
     assert!(!db.assistant_may_revise_design(&theirs.id).unwrap());
     assert_eq!(refused(db.revise_assistant_design(&theirs.id, 1, &input("x"), "Claude")), "not_assistant_draft");
 }
+
+#[test]
+fn rectangles_and_ellipses_take_an_outline_and_rectangles_rounded_corners() {
+    let mut p = proposal();
+    p["pages"][0]["layers"][0]["outline"] = json!({ "color": "#ffffff", "width": 6 });
+    p["pages"][0]["layers"][0]["corner"] = json!(24);
+    let built = try_build(&p, true).unwrap_or_else(|(e, _)| panic!("{e:?}"));
+    let nodes = built.document["scene"]["nodes"].as_object().unwrap();
+    let rect = nodes.values().find(|n| n["type"] == "rect" && n["strokeWidth"] == 6).expect("the outlined rectangle");
+    assert_eq!((rect["stroke"]["color"].as_str(), rect["radiusX"].as_i64(), rect["radiusY"].as_i64()), (Some("#ffffff"), Some(24), Some(24)));
+
+    let mut bad = proposal();
+    bad["pages"][0]["layers"][0]["outline"] = json!({ "color": "red", "width": 900, "dash": 2 });
+    bad["pages"][0]["layers"][0]["corner"] = json!(-1);
+    let e = errors(&bad);
+    for at in ["pages[0].layers[0].outline.color", "pages[0].layers[0].outline.width", "pages[0].layers[0].outline.dash", "pages[0].layers[0].corner"] {
+        assert!(e.iter().any(|i| i.path == at), "{at} in {e:?}");
+    }
+    // A text layer has neither.
+    let mut text = proposal();
+    let i = text["pages"][0]["layers"].as_array().unwrap().iter().position(|l| l["type"] == "text").unwrap();
+    text["pages"][0]["layers"][i]["outline"] = json!({ "color": "#ffffff", "width": 2 });
+    assert!(errors(&text).iter().any(|e| e.path == format!("pages[0].layers[{i}].outline")));
+}

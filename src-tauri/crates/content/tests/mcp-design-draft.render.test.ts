@@ -90,3 +90,15 @@ describe("an MCP-created design draft opens and draws through Rhema's adapters",
     expect(outputCoverPictures(design)).toEqual({ [picture.id!]: { l: 0, t: 0, r: 0, b: 0 } })
   })
 })
+
+describe("an assistant's outlined, rounded rectangle (#448)", () => {
+  it("opens with no issue and reaches outputs with its outline and corners", () => {
+    const withEdges = JSON.parse(JSON.stringify(design)) as RhemaDesign
+    const band = Object.values(withEdges.scene.nodes).find((n) => n.type === "rect")!
+    Object.assign(band, { stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 6, radiusX: 24, radiusY: 24 })
+    const page = designPages(withEdges).find((p) => Object.values(withEdges.scene.nodes).some((n) => n.id === band.id && n.parentId === p.nodeId))!
+    const { scene, issues } = designToScene(withEdges, page.id)
+    expect(issues).toEqual([])
+    expect(scene.layers.find((l) => l.id === band.id)).toMatchObject({ outline: { color: "#ffffff", width: 6 }, corner: 24 })
+  })
+})
