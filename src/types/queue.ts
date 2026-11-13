@@ -204,6 +204,8 @@ export interface ItemTiming {
   milestone?: boolean
   soft_end_minutes?: number
   warn_minutes?: number
+  /** How countdown displays show this item's time (#196): counting down (absent), up, or no timer. */
+  timer?: "up" | "none"
 }
 
 /** One team comment on a rundown item (CL-007). `at` is an ISO time. */

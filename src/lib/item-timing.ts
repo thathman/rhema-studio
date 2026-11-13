@@ -16,6 +16,7 @@ export function cleanItemTiming(raw: unknown): ItemTiming | null {
     // A milestone takes no time, so it has no end to be soft about.
     ...(t.milestone !== true && minutes(t.soft_end_minutes, 600) ? { soft_end_minutes: Math.round(t.soft_end_minutes * 60) / 60 } : {}),
     ...(t.milestone !== true && minutes(t.warn_minutes, 120) ? { warn_minutes: Math.round(t.warn_minutes * 60) / 60 } : {}),
+    ...(t.milestone !== true && (t.timer === "up" || t.timer === "none") ? { timer: t.timer } : {}),
   }
   return Object.keys(out).length ? out : null
 }
