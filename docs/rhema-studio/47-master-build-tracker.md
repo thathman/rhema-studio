@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.5.1.0 · 13 Nov 2026 · main `bcdb021a`**
+**Version 1.5.2.0 · 13 Nov 2026 · main `f2efb8fc`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -118,8 +118,9 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Fixed starts kept by the clock (#196) | MERGED | #930 (13 Nov, ADR 25 §8.9): armed by the Timekeeper, the next fixed-start event begins on the event clock at its time; only in "I start each event", never late or out of order; screens never change. |
 | Engage quiz on Rhema's screens (#425 stage 2) | MERGED | #933 (13 Nov): Show on Rhema's screens puts the quiz on Live as a quick screen and follows the game (join link and code, each question, the answer only at reveal); Back or Take off returns what was on; it stops following on Clear or anything else going up. Scores (nicknames typed on the internet) wait for Show scores. Tested with a mocked service only; the quiz service itself still awaits the owner's deployment decision. |
 | AI draft into a chosen event (#252) | MERGED | #934 (13 Nov): Prepare → AI drafts → Add, as new phases at the end or into one of the open service's events (items at its end, one Undo); an event gone since it was chosen adds nothing. |
-| Turned cameras and videos (#448) | MERGED | #936 (13 Nov): a camera or video turned in Design saves and is drawn turned on window outputs, NDI and recording; on a browser feed its player gets the same turn and stays inside the picture, laid out in the scene's own shape. Tickers stay upright (refused). Pixel-tested; not yet seen on a TV. |
-| Browser-feed cross-fade keeps cameras and videos | MERGED | #937 (13 Nov): a faded Take on a TV no longer fades a hole where a camera was; one staying in place is not frozen. Device check on a TV pending. |
+| Turned cameras and videos (#448) | PHYSICAL TESTED | #936 (13 Nov): a camera or video turned in Design saves and is drawn turned on window outputs, NDI and recording; on a browser feed its player gets the same turn and stays inside the picture, laid out in the scene's own shape. Tickers stay upright (refused). Onn TV, QA app at `#940` (13 Nov): a video turned 20° plays inside an equally turned red frame, edge even all round; the same in a browser feed letterboxed in a window. |
+| Browser-feed cross-fade keeps cameras and videos | PHYSICAL TESTED | #937 (13 Nov): a faded Take on a TV no longer fades a hole where a camera was; one staying in place is not frozen. Onn TV (13 Nov): a 4 s fade from the turned video to a plain scene showed the video fading out in its frame halfway, then only the new scene. |
+| Scene videos on TVs and browser feeds | PHYSICAL TESTED | #940 (13 Nov): found on the Onn TV — since 24 Oct a scene video's file was asked for with the scene's id instead of the feed key (403), so no scene video ever played on a TV or browser feed. Fixed and seen playing on the Onn. |
 | Backup and restore safety | MERGED | #786 (refuses backups from newer versions; restore blocked while on air). |
 
 ### Phase E — Supervised church rehearsal
