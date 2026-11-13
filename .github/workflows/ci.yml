@@ -53,6 +53,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: ESLint (whole repo, blocking; the upstream debt was paid down in ST-010)
         run: bunx eslint .
+      - name: Relative links in the docs point at files (#413)
+        run: node scripts/check-doc-links.mjs
 
   rust:
     name: Rust (content tests, app check, clippy)
