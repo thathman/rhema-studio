@@ -17,3 +17,10 @@ new_sqlite_classes = ["QuizRoom", "QuizDirectory"]
 
 # Set secrets with: npx wrangler secret put ADMIN_KEY, SESSION_SIGNING_KEY, TURNSTILE_SITE_KEY, and TURNSTILE_SECRET.
 # No deployment occurs merely by building the desktop application.
+
+# On your own domain, under a path (e.g. https://example.com/quiz): uncomment both, with your
+# domain (its DNS on Cloudflare), then `npx wrangler deploy`. Rhema Studio's quiz address is then
+# https://example.com/quiz, and the Turnstile widget must list example.com.
+# routes = [{ pattern = "example.com/quiz*", zone_name = "example.com" }]
+# [vars]
+# BASE_PATH = "/quiz"

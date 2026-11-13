@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import worker, { QuizDirectory, QuizRoom } from "./index.mjs";
+import worker, { QuizDirectory, QuizRoom, basePath } from "./index.mjs";
 
 class MemoryStorage {
   values = new Map();
@@ -365,4 +365,42 @@ test("participant joins require a room-bound Turnstile result and host deletion 
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("under a base path (example.com/quiz) every page, link and API answers there and nowhere else", async () => {
+  const env = environment({ BASE_PATH: "/quiz" });
+  const created = await (async () => {
+    const r = await request(env, "/quiz/api/rooms", { method: "POST", token: env.ADMIN_KEY, body: quiz });
+    assert.equal(r.status, 201);
+    return r.json();
+  })();
+  assert.equal(created.joinUrl, `https://quiz.example/quiz/join/${created.code}`);
+  assert.match(created.screenUrl, new RegExp(`^https://quiz\\.example/quiz/screen/${created.code}#`));
+  const state = await request(env, `/quiz/api/rooms/${created.code}/state`, { token: created.hostToken });
+  assert.equal(state.status, 200);
+  // The pages ask for everything under the base path.
+  const join = await (await request(env, `/quiz/join/${created.code}`)).text();
+  assert.match(join, /fetch\("\/quiz\/api\/rooms\//);
+  assert.doesNotMatch(join, /fetch\("\/api\//);
+  const screen = await (await request(env, `/quiz/screen/${created.code}`)).text();
+  assert.match(screen, /src="\/quiz\/qr\//);
+  assert.match(screen, /fetch\("\/quiz\/api\/rooms\//);
+  const landing = await (await request(env, "/quiz")).text();
+  assert.match(landing, /location\.href="\/quiz\/join\/"/);
+  const qr = await request(env, `/quiz/qr/${created.code}`);
+  assert.equal(qr.status, 200);
+  assert.match(await qr.text(), /<svg/);
+  // Outside the base path: nothing, even the API.
+  assert.equal((await request(env, "/")).status, 404);
+  assert.equal((await request(env, `/api/rooms/${created.code}/state`, { token: created.hostToken })).status, 404);
+  assert.equal((await request(env, "/quizzes")).status, 404);
+});
+
+test("a base path setting is a plain path or nothing", () => {
+  assert.equal(basePath({}), "");
+  assert.equal(basePath({ BASE_PATH: "/" }), "");
+  assert.equal(basePath({ BASE_PATH: "quiz/" }), "/quiz");
+  assert.equal(basePath({ BASE_PATH: "/church/quiz" }), "/church/quiz");
+  assert.equal(basePath({ BASE_PATH: '/quiz"><script>' }), "");
+  assert.equal(basePath({ BASE_PATH: "/a//b" }), "");
 });

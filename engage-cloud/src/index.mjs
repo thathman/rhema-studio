@@ -78,8 +78,27 @@ async function body(req) {
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
-function html(content) {
-  return new Response(content, { headers: {
+/**
+ * Where the quiz lives on its host: "" at the root (rhema-engage.<you>.workers.dev), or a path such
+ * as "/quiz" when the Worker is routed at example.com/quiz* (env BASE_PATH). Anything that is not a
+ * plain path of letters, digits, "-", "_" and "/" is ignored, so a bad setting can never inject.
+ */
+export function basePath(env) {
+  const raw = typeof env?.BASE_PATH === "string" ? env.BASE_PATH.trim() : "";
+  if (!raw || raw === "/") return "";
+  const base = "/" + raw.replace(/^\/+|\/+$/g, "");
+  return /^\/[A-Za-z0-9_\-/]{1,100}$/.test(base) && !base.includes("//") ? base : "";
+}
+/** The pages' own links and requests (written for the root) moved under the base path. */
+export function withBase(content, base) {
+  if (!base) return content;
+  return content
+    .replaceAll('fetch("/api/rooms/', `fetch("${base}/api/rooms/`)
+    .replaceAll('location.href="/join/"', `location.href="${base}/join/"`)
+    .replaceAll('src="/qr/', `src="${base}/qr/`);
+}
+function html(content, base = "") {
+  return new Response(withBase(content, base), { headers: {
     "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
     "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline' https://challenges.cloudflare.com; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; base-uri 'none'; form-action 'self'",
     "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
@@ -133,15 +152,19 @@ async function verifyTurnstile(req, token, code, env) {
 }
 export default {
   async fetch(req, env) {
-    const url = new URL(req.url), path = url.pathname;
+    const url = new URL(req.url), base = basePath(env);
+    // Routed under a base path: only what is under it is the quiz's; the rest is not served.
+    if (base && url.pathname !== base && !url.pathname.startsWith(base + "/")) return cors(err("Not found", 404));
+    const path = url.pathname.slice(base.length) || "/";
+    const at = (p) => new URL(base + p, url);
     if (req.method === "OPTIONS" && path.startsWith("/api/")) return cors(new Response(null, { status: 204 }));
     try {
-      if (req.method === "GET" && path === "/") return html(landingPage());
+      if (req.method === "GET" && path === "/") return html(landingPage(), base);
       let match = new RegExp(`^/(join|screen)/(${roomCodeRoute})$`).exec(path);
-      if (req.method === "GET" && match) return html(match[1] === "join" ? participantPage(match[2], env.TURNSTILE_SITE_KEY || "") : screenPage(match[2]));
+      if (req.method === "GET" && match) return html(match[1] === "join" ? participantPage(match[2], env.TURNSTILE_SITE_KEY || "") : screenPage(match[2]), base);
       match = new RegExp(`^/qr/(${roomCodeRoute})$`).exec(path);
       if (req.method === "GET" && match) {
-        const target = new URL("/join/" + match[1], url).toString();
+        const target = at("/join/" + match[1]).toString();
         const svg = await QRCode.toString(target, { type: "svg", errorCorrectionLevel: "M", margin: 3, width: 320 });
         return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
       }
@@ -170,9 +193,9 @@ export default {
         const room = env.ROOMS.get(env.ROOMS.idFromName(code));
         const init = await room.fetch("https://internal/init", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, draft, hostHash: await hash(hostToken), screenHash: await hash(screenToken) }) });
         if (!init.ok) return cors(err("Unable to initialize room", 503));
-        const screenUrl = new URL("/screen/" + code, url);
+        const screenUrl = at("/screen/" + code);
         screenUrl.hash = screenToken;
-        return cors(json({ code, hostToken, joinUrl: new URL("/join/" + code, url).toString(), screenUrl: screenUrl.toString() }, 201));
+        return cors(json({ code, hostToken, joinUrl: at("/join/" + code).toString(), screenUrl: screenUrl.toString() }, 201));
       }
       match = new RegExp(`^/api/rooms/(${roomCodeRoute})(?:/(state|join|answer|control))?$`).exec(path);
       if (match) {

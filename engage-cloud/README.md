@@ -32,6 +32,17 @@ Use a **long random `ADMIN_KEY`**, a separate random `SESSION_SIGNING_KEY` of at
 
 **No deployment has been carried out by creating this PR.** A public endpoint, Worker plan and key must be configured by an owner before real guests can participate.
 
+## Your own domain, at a path (example.com/quiz)
+
+The quiz can live under a path on a domain whose DNS is on Cloudflare, instead of `*.workers.dev`:
+
+1. In `wrangler.toml`, uncomment the `routes` line and the `[vars] BASE_PATH` block, with your domain and path (for example `example.com/quiz*` and `/quiz`). Add `workers_dev = false` too if the old `*.workers.dev` address should stop answering (otherwise it keeps serving, but only under `/quiz`).
+2. Add your domain to the Turnstile widget's hostnames (Cloudflare dashboard → Turnstile).
+3. `npx wrangler deploy`.
+4. In Rhema Studio → Live → Engage Quiz, use `https://example.com/quiz` as the quiz address.
+
+Every page, QR code, join link and API call then stays under `/quiz`; nothing else on the domain is touched, and the Worker answers nothing outside that path. Without `BASE_PATH` it serves at the root as before.
+
 ## Security and privacy
 
 - Never put `ADMIN_KEY` or the host token in public slides, shared service files or screenshots. Host credentials are held in desktop app memory for the session; leaving/restarting the desktop loses the token, not the room. The screen URL is a read-only bearer link for the designated public display; its signed token is in the URL fragment, which browsers do not send to the Worker or as a referrer.
