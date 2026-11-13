@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useFeedHealth } from "@/lib/browser-feeds"
 import { cn } from "@/lib/utils"
 import { useBroadcastStore } from "@/stores"
-import { autoModeOf, type AutoMode } from "@/stores/broadcast-store"
 import { outputOnAir } from "@/lib/output-on-air"
 import { forOutputLanguage, LANGUAGE_NAMES, withLanguageOverride } from "@/lib/output-language"
 import { LiveSourcesStrip } from "@/studio/present/live-sources-strip"
@@ -21,7 +20,6 @@ import type { BroadcastOutput, BroadcastOutputLanguage, BroadcastOutputStatus } 
 export function LiveOutputPanel({ outputId, sceneTakeAction }: { outputId?: string | null; sceneTakeAction?: ReactNode } = {}) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
-  const autoMode = useBroadcastStore(autoModeOf)
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
@@ -73,26 +71,6 @@ export function LiveOutputPanel({ outputId, sceneTakeAction }: { outputId?: stri
             <span aria-hidden className="mx-2 h-4 w-px bg-border" />
           </>
         )}
-        <label
-          className={cn(
-            // Space from the title, and amber while heard verses can reach screens without Take (UX audit S1c).
-            "ml-3 flex items-center gap-2 rounded-full px-2",
-            autoMode !== "manual" && "border border-amber-500/50 bg-amber-500/10",
-          )}
-          title="Auto: On: while on air, a verse heard while listening goes live without Take source live (while a song, hymn or slide is up it goes only to the feeds that follow Bible). Bible feeds only: it goes to the feeds that follow Bible and never the main screens. Off (the default): heard verses wait in the preview."
-        >
-          <span className={cn("whitespace-nowrap text-xs font-medium transition-colors", autoMode !== "manual" ? "text-amber-600 dark:text-amber-300" : "text-muted-foreground")}>
-            {autoMode === "manual" ? "Heard verses: wait" : "Heard verses go live"}
-          </span>
-          <Select value={autoMode} onValueChange={(v) => useBroadcastStore.getState().setAutoMode(v as AutoMode)}>
-            <SelectTrigger size="sm" className="text-xs" aria-label="Auto: where heard verses go by themselves"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="manual">Off</SelectItem>
-              <SelectItem value="bible">Bible feeds only</SelectItem>
-              <SelectItem value="auto">On</SelectItem>
-            </SelectContent>
-          </Select>
-        </label>
         {savedOutput && (
           <>
             <span aria-hidden className="mx-2 h-4 w-px bg-border" />

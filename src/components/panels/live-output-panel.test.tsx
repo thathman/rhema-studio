@@ -26,6 +26,7 @@ vi.mock("@/components/ui/canvas-verse", () => ({ CanvasVerse: () => null }))
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { LiveOutputPanel } from "./live-output-panel"
+import { AutoModeControl } from "./auto-mode-control"
 import { PreviewPanel } from "./preview-panel"
 import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
 import type { QueueItem, Verse } from "@/types"
@@ -84,14 +85,24 @@ describe("Present's Program and Preview panels", () => {
     expect(action.closest('[role="toolbar"]')).toBeNull()
   })
 
+  it("Auto (in Live tools → Listening) is Off by default and shows amber words once on", async () => {
+    useBroadcastStore.getState().setAutoMode("manual")
+    await render(<AutoModeControl />)
+    expect(el.querySelector('[aria-label="Auto: where heard verses go by themselves"]')).not.toBeNull()
+    expect(el.textContent).toContain("Heard verses: wait")
+    await act(async () => useBroadcastStore.getState().setAutoMode("auto"))
+    expect(el.textContent).toContain("Heard verses go live")
+    await act(async () => useBroadcastStore.getState().setAutoMode("manual"))
+  })
+
   it("Program has no second go-live switch and reports whether the screens are on air", async () => {
     await render(<LiveOutputPanel />)
     expect(el.querySelector('[role="switch"]')).toBeNull()
     const header = el.querySelector('[data-slot="panel-header"]')!
     expect(header.textContent).toContain("Program")
     expect(header.textContent).toContain("Off air")
-    // Auto stays: where heard verses go is not a go-live control.
-    expect(el.querySelector('[aria-label="Auto: where heard verses go by themselves"]')).not.toBeNull()
+    // Auto moved to Live tools → Listening (UX audit slice 4); Program keeps no Auto control.
+    expect(el.querySelector('[aria-label="Auto: where heard verses go by themselves"]')).toBeNull()
     await act(async () => useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "John 3:16", segments: [] } }))
     expect(header.textContent).toContain("On air")
     await act(async () => useBroadcastStore.setState({ rehearsal: true }))
