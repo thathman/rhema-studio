@@ -1,5 +1,6 @@
 import type { SectionInput, SectionKind, SongQueueItem, SongSummary, SongWithSections, VerseRenderData } from "@/types"
 import { isHymnSong } from "@/lib/song-kind"
+import { inChurchOrder } from "@/lib/church-languages"
 
 /** One screen of a song: a section (or part of one) in one or two languages. */
 export interface LyricSlide {
@@ -250,9 +251,8 @@ export function sectionShort(kind: SectionKind, label: string): string {
 
 /** A song (from search) as a rundown item: default arrangement, primary language first, then the others it has. */
 export function songQueueItem(song: SongSummary, id: string = crypto.randomUUID()): SongQueueItem {
-  const languages = [song.primary_language, ...song.languages.filter((l) => l !== song.primary_language)].filter((l) =>
-    song.languages.includes(l)
-  )
+  // The church's languages first, in its order (#446), then the song's own primary.
+  const languages = inChurchOrder(song.primary_language, song.languages)
   return {
     id,
     kind: "song",

@@ -85,7 +85,7 @@ export function ChurchStep({ error, idPrefix: p = "setup", applyBrandOnLeave = t
       <Field id={`${p}-campus`} label="Campus or ministry (optional)" hint="Only on this computer.">
         <Input id={`${p}-campus`} value={campus} placeholder="e.g. Ikeja campus, Youth church" onChange={(e) => setSetup({ campus: e.target.value })} aria-describedby={`${p}-campus-hint`} />
       </Field>
-      <Field id={`${p}-languages`} label="Service languages (optional)" hint="As you would say them. Bible and hymn languages are chosen in a later step.">
+      <Field id={`${p}-languages`} label="Service languages (optional)" hint="As you would say them, first language first: new songs show their words in this order. Bible translations are chosen in a later step.">
         <Input id={`${p}-languages`} value={languages} placeholder="e.g. English, Yorùbá" onChange={(e) => setSetup({ serviceLanguages: e.target.value })} aria-describedby={`${p}-languages-hint`} />
       </Field>
       <TimeZoneField idPrefix={p} />
