@@ -6,7 +6,7 @@ export type LiveToolsTab = "bible" | "listening" | "production" | "controls"
 
 /** The production tools, in order; Live's tools dock lists them in its one row of tabs. */
 export const PRODUCTION_TABS: ReadonlyArray<readonly [ProductionTab, string]> = [
-  ["timekeeper", "Timekeeper"],
+  ["timekeeper", "Timer"],
   ["screens", "Screens"],
   ["health", "Show health"],
   // Scenes (the id stays "programs", so saved links and other pages keep working).

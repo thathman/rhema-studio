@@ -771,7 +771,7 @@ describe("Present's unified Live console", () => {
 
     expect(liveTools.getAttribute("aria-expanded")).toBe("true")
     // One row of tabs (UX audit): the production tool itself is named and chosen, here the Timekeeper.
-    expect(element.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("Timekeeper")
+    expect(element.querySelector('[data-slot="live-tools-panel"] [role="tab"][aria-selected="true"]')?.textContent).toContain("Timer")
     expect([...element.querySelectorAll('[data-slot="live-tools-panel"] [role="tablist"]')]).toHaveLength(1)
     const controlsTab = [...element.querySelectorAll<HTMLElement>('[data-slot="live-tools-panel"] [role="tab"]')].find((tab) => tab.textContent?.includes("More controls"))!
     await act(async () => {
