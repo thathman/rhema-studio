@@ -92,6 +92,17 @@ export interface SceneOutline {
   width: number
 }
 
+/** A layer's drop shadow (#448), as the Design editor draws it: px on the 1920×1080 artboard. */
+export interface SceneShadow {
+  color: string
+  /** 0–1 */
+  opacity: number
+  /** 0–200 px */
+  blur: number
+  x: number
+  y: number
+}
+
 export interface SceneLayer {
   id: string
   name: string
@@ -122,6 +133,9 @@ export interface SceneLayer {
   outline?: SceneOutline
   /** color: rounded corners, px on the 1920×1080 artboard (#448). */
   corner?: number
+  /** color, ellipse, text, picture, logo: a drop shadow and a blur (0–100, the editor's percentage), as the editor draws them (#448). */
+  shadow?: SceneShadow
+  blur?: number
   /** text: literal content (not a live source binding). */
   text?: string
   /**
@@ -222,6 +236,8 @@ export interface SceneLayerFrame {
   gradient?: SceneGradient
   outline?: SceneOutline
   corner?: number
+  shadow?: SceneShadow
+  blur?: number
   /** text: static words and their version-pinned style, rendered by every subscribed output. */
   text?: string
   fontSize?: number
