@@ -6,7 +6,7 @@
 use serde_json::{json, Value};
 
 use rhema_content::proposal::{self, Issue};
-use rhema_content::{ContentDb, DesignInput};
+use rhema_content::{ContentDb, ContentError, DesignInput};
 
 use super::{text, tool_error, Server};
 
@@ -17,6 +17,8 @@ pub(super) fn tools() -> Vec<Value> {
         json!({ "name": "rhema_get_design_capabilities", "description": "What a design proposed here may hold, so Rhema's screens draw it exactly as the Design editor shows it: 1920×1080 pages of text (both service languages), rectangles and ellipses (solid or linear-gradient fills) and pictures from the church's media library by id, with the limits and what is refused and why.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro }),
         json!({ "name": "rhema_list_designs", "description": "The church's designs in Rhema Studio → Design (newest change first): id, title, kind, draft revision and latest saved version. No documents.", "inputSchema": { "type": "object", "properties": { "query": { "type": "string", "description": "words in the title" }, "limit": { "type": "integer", "minimum": 1, "maximum": super::MAX_LIST } } }, "annotations": ro }),
         json!({ "name": "rhema_validate_design_draft", "description": "Check a proposed design without saving it: every page and layer, the fills and fonts, both languages' words and that each picture is in the media library. Returns errors (with where each is), warnings and what would be made.", "inputSchema": { "type": "object", "properties": { "design": design }, "required": ["design"] }, "annotations": ro }),
+        json!({ "name": "rhema_get_design", "description": "One design from rhema_list_designs: its title, kind, draft revision, latest version, whether an assistant may still revise it, and the editor's document (pages and layers as Rhema stores them).", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] }, "annotations": ro }),
+        json!({ "name": "rhema_update_design_draft", "description": "Replace a draft an assistant made with a revised proposal (same shape and checks as rhema_create_design_draft). Only a draft an assistant made over MCP that no person has saved since and that has no version yet, and only at the revision you read (else it is refused: read it again). Never a version, an approval, a service or a screen.", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 }, "design": design }, "required": ["id", "revision", "design"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false } }),
         json!({ "name": "rhema_create_design_draft", "description": "Save a checked proposed design as a NEW draft in Rhema Studio → Design → My Designs, for people to open, edit, save and version themselves. It never changes an existing design, makes a version, approves anything, touches a service or puts anything on screen. Fails with the same errors as the check.", "inputSchema": { "type": "object", "properties": { "design": design }, "required": ["design"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false } }),
     ]
 }
@@ -39,12 +41,13 @@ fn capabilities() -> Value {
             "pictures by address (web, file or data URLs): only the media library, by id",
             "crops and masks: people add them in the Design editor",
             "control and text-direction characters in words",
-            "ids, revisions, versions, pins, approvals, outputs or services: an assistant only makes a new draft",
+            "ids, revisions, versions, pins, approvals, outputs or services in a proposal: an assistant only makes or revises its own drafts",
         ],
         "rules": [
             "A draft is saved in Rhema Studio → Design → My Designs. People open it, edit it, save it and make a version; only a version can be used in a service, and only an approved service reaches the screens.",
             "Nothing here can change an existing design, a service or a screen.",
             "Check with rhema_validate_design_draft, then save with rhema_create_design_draft.",
+            "To change a draft you made, read it with rhema_get_design and send the whole revised proposal to rhema_update_design_draft with the revision you read. Once a person saves it or makes a version, it is theirs.",
         ],
     })
 }
@@ -70,6 +73,23 @@ fn now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(0))
 }
 
+/// The document with every local file address taken out (pictures keep their media id): this
+/// computer's folders are never handed to an assistant.
+fn without_local_addresses(mut v: Value) -> Value {
+    fn walk(v: &mut Value) {
+        match v {
+            Value::Object(map) => {
+                map.retain(|_, x| !x.as_str().is_some_and(|t| { let t = t.to_ascii_lowercase(); t.starts_with("asset:") || t.starts_with("http://asset.localhost") || t.starts_with("https://asset.localhost") || t.starts_with("file:") || t.starts_with('/') }));
+                map.values_mut().for_each(walk);
+            }
+            Value::Array(list) => list.iter_mut().for_each(walk),
+            _ => {}
+        }
+    }
+    walk(&mut v);
+    v
+}
+
 /// The design tools' answers; None for a name that is not one of them.
 pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
     Some(match name {
@@ -82,7 +102,16 @@ pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
                 Err(e) => tool_error(&format!("could not read the designs: {e}")),
             }
         }
-        "rhema_validate_design_draft" | "rhema_create_design_draft" => {
+        "rhema_get_design" => {
+            let Some(c) = &s.content else { return Some(tool_error(s.problem.as_deref().unwrap_or("no designs"))) };
+            let Some(id) = a.get("id").and_then(Value::as_str) else { return Some(tool_error("give the design's id (from rhema_list_designs)")) };
+            match c.get_design(id) {
+                Ok(Some(d)) => text(&json!({ "id": d.id, "title": d.title, "kind": d.kind, "revision": d.revision, "latestVersion": d.latest_version, "updatedAt": d.updated_at, "archived": d.archived_at.is_some(), "assistantMayRevise": c.assistant_may_revise_design(&d.id).unwrap_or(false), "document": without_local_addresses(d.document) })),
+                Ok(None) => tool_error("there is no design with that id"),
+                Err(e) => tool_error(&format!("could not read the design: {e}")),
+            }
+        }
+        "rhema_validate_design_draft" | "rhema_create_design_draft" | "rhema_update_design_draft" => {
             let (Some(c), Some(dir)) = (&s.content, s.dir.as_deref()) else { return Some(tool_error(s.problem.as_deref().unwrap_or("no Rhema data on this computer yet"))) };
             // Absolute, as the app's own media folder is: a relative `--data` would store an address the editor cannot load.
             let media = std::path::absolute(dir.join("media")).unwrap_or_else(|_| dir.join("media"));
@@ -105,8 +134,26 @@ pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
             if name == "rhema_validate_design_draft" {
                 return Some(text(&report));
             }
+            let input = DesignInput { title: built.title, kind: built.kind, document: built.document };
+            if name == "rhema_update_design_draft" {
+                let (Some(id), Some(revision)) = (a.get("id").and_then(Value::as_str), a.get("revision").and_then(Value::as_i64)) else {
+                    return Some(tool_error("give the draft's id and the revision you read (rhema_get_design)"));
+                };
+                let saved = ContentDb::open_existing(&dir.join("studio.db")).and_then(|db| db.revise_assistant_design(id, revision, &input, &assistant(s)));
+                return Some(match saved {
+                    Ok(d) => {
+                        eprintln!("[rhema-mcp] design draft {} revised by {}", d.id, assistant(s));
+                        report["designId"] = json!(d.id);
+                        report["revision"] = json!(d.revision);
+                        report["next"] = json!("Revised in Rhema Studio → Design → My Designs. It is still a draft: people open it, edit and save it, and make a version before any service can use it.");
+                        text(&report)
+                    }
+                    Err(ContentError::Conflict { actual, .. }) => tool_error(&format!("the draft changed since you read it (now revision {actual}): read it again with rhema_get_design")),
+                    Err(e) => tool_error(&format!("the draft was not revised: {e}")),
+                });
+            }
             // A handle of its own for this one save: the server otherwise only reads.
-            let saved = ContentDb::open_existing(&dir.join("studio.db")).and_then(|db| db.create_assistant_design(&DesignInput { title: built.title, kind: built.kind, document: built.document }, &assistant(s)));
+            let saved = ContentDb::open_existing(&dir.join("studio.db")).and_then(|db| db.create_assistant_design(&input, &assistant(s)));
             match saved {
                 Ok(d) => {
                     eprintln!("[rhema-mcp] design draft {} created by {}", d.id, assistant(s));

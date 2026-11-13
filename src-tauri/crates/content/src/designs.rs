@@ -156,6 +156,52 @@ impl ContentDb {
         Ok(saved)
     }
 
+    /// Whether `revise_assistant_design` would take this design (at its current revision).
+    pub fn assistant_may_revise_design(&self, id: &str) -> Result<bool> {
+        let conn = self.lock()?;
+        let mut stmt = conn.prepare("SELECT payload FROM audit_events WHERE entity = 'design' AND entity_id = ?1 ORDER BY id")?;
+        let payloads: Vec<Option<String>> = stmt.query_map(params![id], |r| r.get(0))?.collect::<std::result::Result<_, _>>()?;
+        let versioned: bool = conn.query_row("SELECT EXISTS (SELECT 1 FROM design_versions WHERE design_id = ?1)", params![id], |r| r.get(0))?;
+        Ok(!versioned && !payloads.is_empty() && payloads.iter().all(|p| by_mcp(p.as_deref())))
+    }
+
+    /// An AI assistant revises a draft over MCP (#443): only a draft an assistant made over MCP, that
+    /// no person has saved since and that has no version yet, and only at the revision it read
+    /// (`Conflict` otherwise). Anything a person has touched stays theirs.
+    pub fn revise_assistant_design(&self, id: &str, expected_revision: i64, input: &DesignInput, assistant: &str) -> Result<DesignDocument> {
+        let assistant: String = assistant.trim().chars().take(100).collect();
+        let assistant = if assistant.is_empty() { "an AI assistant".to_string() } else { assistant };
+        let (title, kind, document) = validate(input)?;
+        crate::as_actor(&format!("{assistant} (AI assistant, MCP)"), || {
+            let mut conn = self.lock()?;
+            let tx = conn.transaction()?;
+            check_revision(&tx, id, expected_revision)?;
+            let refuse = |message: &str| Err(ContentError::Refused { code: "not_assistant_draft", message: message.to_string() });
+            let mut stmt = tx.prepare("SELECT action, payload FROM audit_events WHERE entity = 'design' AND entity_id = ?1 ORDER BY id")?;
+            let events: Vec<(String, Option<String>)> = stmt.query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<std::result::Result<_, _>>()?;
+            drop(stmt);
+            match events.first() {
+                Some((action, payload)) if action == "create" && by_mcp(payload.as_deref()) => {}
+                _ => return refuse("only a draft an assistant made can be revised by one: this design was made in Rhema Studio"),
+            }
+            if events.iter().skip(1).any(|(_, p)| !by_mcp(p.as_deref())) {
+                return refuse("someone has changed this design in Rhema Studio since: it is theirs now; propose a new draft instead");
+            }
+            let versioned: bool = tx.query_row("SELECT EXISTS (SELECT 1 FROM design_versions WHERE design_id = ?1)", params![id], |r| r.get(0))?;
+            if versioned {
+                return refuse("this design has a version already: propose a new draft instead");
+            }
+            tx.execute(
+                "UPDATE design_documents SET title = ?2, kind = ?3, document = ?4, revision = revision + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                params![id, title, kind, document],
+            )?;
+            audit(&tx, "design", id, "update", &serde_json::json!({ "title": title, "source": "mcp", "assistant": assistant }))?;
+            let saved = load_design(&tx, id)?.ok_or_else(|| ContentError::NotFound(id.to_string()))?;
+            tx.commit()?;
+            Ok(saved)
+        })
+    }
+
     /// Freeze the current draft as the next numbered version (only the revision the caller saw).
     pub fn create_design_version(&self, id: &str, expected_revision: i64, note: Option<&str>, saved_by: &str) -> Result<DesignVersion> {
         let mut conn = self.lock()?;
@@ -353,6 +399,11 @@ fn row_to_version(r: &rusqlite::Row<'_>) -> rusqlite::Result<DesignVersion> {
 
 fn load_version(conn: &Connection, id: &str, version: i64) -> Result<Option<DesignVersion>> {
     Ok(conn.query_row(&format!("SELECT {VERSION_COLUMNS} FROM design_versions WHERE design_id = ?1 AND version = ?2"), params![id, version], row_to_version).optional()?)
+}
+
+/// An audit payload written for an assistant over MCP.
+fn by_mcp(payload: Option<&str>) -> bool {
+    payload.and_then(|p| serde_json::from_str::<serde_json::Value>(p).ok()).is_some_and(|v| v["source"] == "mcp")
 }
 
 fn check_revision(tx: &Transaction<'_>, id: &str, expected: i64) -> Result<()> {
