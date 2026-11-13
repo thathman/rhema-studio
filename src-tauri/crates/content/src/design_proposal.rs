@@ -107,6 +107,30 @@ fn refusal(field: &str) -> String {
     }
 }
 
+/// A rectangle's or ellipse's outline (#448): a solid #rrggbb, 0.5–200 px, centred on the edge as
+/// outputs draw it. The editor's stroke and its width; none when absent or refused.
+fn outline(ctx: &mut Ctx, o: &Map<String, Value>, path: &str) -> (Value, f64) {
+    match o.get("outline") {
+        None => (Value::Null, 0.0),
+        Some(Value::Object(line)) => {
+            let at = format!("{path}.outline");
+            let color = line.get("color").and_then(Value::as_str).filter(|c| hex6(c));
+            if color.is_none() {
+                ctx.err(&format!("{at}.color"), "an outline colour must be #rrggbb");
+            }
+            let width = num(ctx, line, &at, "width", 0.5, 200.0, None);
+            if let Some(extra) = line.keys().find(|k| *k != "color" && *k != "width") {
+                ctx.err(&format!("{at}.{extra}"), "an outline has only a color and a width");
+            }
+            color.map_or((Value::Null, 0.0), |c| (json!({ "type": "solid", "color": c }), width))
+        }
+        Some(_) => {
+            ctx.err(&format!("{path}.outline"), "an outline is { color: \"#rrggbb\", width: 0.5–200 }");
+            (Value::Null, 0.0)
+        }
+    }
+}
+
 /// A number as JSON, whole numbers without a fraction (as the editor writes them).
 #[allow(clippy::cast_possible_truncation)]
 fn whole(n: f64) -> Value {
@@ -356,26 +380,7 @@ fn layer(
                 ("height".into(), json!(height)),
                 ("fill".into(), fill),
             ]);
-            // An outline (#448): a solid #rrggbb, 0.5–200 px, centred on the edge as outputs draw it.
-            let (stroke, stroke_width) = match o.get("outline") {
-                None => (Value::Null, 0.0),
-                Some(Value::Object(line)) => {
-                    let at = format!("{path}.outline");
-                    let color = line.get("color").and_then(Value::as_str).filter(|c| hex6(c));
-                    if color.is_none() {
-                        ctx.err(&format!("{at}.color"), "an outline colour must be #rrggbb");
-                    }
-                    let width = num(ctx, line, &at, "width", 0.5, 200.0, None);
-                    if let Some(extra) = line.keys().find(|k| *k != "color" && *k != "width") {
-                        ctx.err(&format!("{at}.{extra}"), "an outline has only a color and a width");
-                    }
-                    (color.map_or(Value::Null, |c| json!({ "type": "solid", "color": c })), if color.is_some() { width } else { 0.0 })
-                }
-                Some(_) => {
-                    ctx.err(&format!("{path}.outline"), "an outline is { color: \"#rrggbb\", width: 0.5–200 }");
-                    (Value::Null, 0.0)
-                }
-            };
+            let (stroke, stroke_width) = outline(ctx, o, path);
             node.extend([("stroke".into(), stroke), ("strokeWidth".into(), whole(stroke_width))]);
             if kind == "rect" {
                 let corner = num(ctx, o, path, "corner", 0.0, 540.0, Some(0.0));
