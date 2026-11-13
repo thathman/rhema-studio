@@ -4,7 +4,7 @@ import { cameraPathOf, cameraSourceId, feedFrame, withCameraPath, type LiveSourc
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
-import type { BroadcastOutput, BroadcastOutputLanguage, BroadcastTheme, LowerThird, NoSignal, Scene, SceneAppearanceSnapshot, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
+import type { BroadcastOutput, BroadcastOutputLanguage, BroadcastTheme, LowerThird, NoSignal, Scene, SceneAppearanceSnapshot, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, SceneOutline, Ticker, VerseRenderData } from "@/types"
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 import { countdownTarget, isCountdownTo, type CountdownTargets } from "@/lib/countdown"
 import { normalizeGradient } from "@/lib/scene-gradient"
@@ -263,11 +263,14 @@ export function normalizeScene(raw: unknown): Scene | null {
     const ellipseColor = l.kind === "ellipse" ? (typeof l.color === "string" && TEXT_COLOR.test(l.color) ? l.color : "#3157a4") : undefined
     // A gradient Rhema cannot draw is dropped and the layer shows its solid colour.
     const gradient = l.kind === "color" || l.kind === "ellipse" ? normalizeGradient(l.gradient) : undefined
+    // An outline or corner Rhema cannot draw is dropped and the shape is drawn without it (#448).
+    const outline = l.kind === "color" || l.kind === "ellipse" ? sceneOutline(l.outline) : undefined
+    const corner = l.kind === "color" ? clamp(l.corner, 0, 540, 0) || undefined : undefined
     // A picture drawing Rhema cannot draw is dropped and the picture covers its box, as before.
     const imageDraw = l.kind === "picture" ? normalizeImageDraw(l.imageDraw) : undefined
     // Upright stays absent; a kind outputs cannot turn (a camera, video or ticker) stays upright.
     const rotation = layerTurns(l.kind) ? layerRotation(l.rotation) : undefined
-    return [{ ...l, rotation, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), gradient, imageDraw, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    return [{ ...l, rotation, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), gradient, outline, corner, imageDraw, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   const backgroundGradient = normalizeGradient(s.backgroundGradient)
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", ...(backgroundGradient ? { backgroundGradient } : {}), layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.updatedBy === "string" ? { updatedBy: s.updatedBy.trim().slice(0, 60) || null } : s.updatedBy === null ? { updatedBy: null } : {}), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}), ...(designPin(s.design) ? { design: { id: s.design.id, version: s.design.version, ...(s.design.pageId ? { pageId: s.design.pageId } : {}) } } : {}) }
@@ -406,7 +409,14 @@ function contentKey(f: SceneLayerFrame): string {
   // A clock's time moves by itself: only starting, stopping or a different kind of clock is new.
   if (f.kind === "clock") return f.clock?.mode ?? ""
   if (f.kind === "text") return fingerprint(JSON.stringify([f.text, f.fontFamily, f.fontSize, f.fontWeight, f.fontStyle, f.textAlign, f.lineHeight, f.textColor, f.underline, f.textWiden]))
-  return f.gradient ? fingerprint(JSON.stringify(f.gradient)) : (f.color ?? "")
+  return f.gradient || f.outline || f.corner ? fingerprint(JSON.stringify([f.gradient, f.color, f.outline, f.corner])) : (f.color ?? "")
+}
+
+/** A shape outline as outputs draw it (#448): a #rrggbb colour and a width of 0.5–200 px, else none. */
+export function sceneOutline(raw: unknown): SceneOutline | undefined {
+  const o = raw as { color?: unknown; width?: unknown } | null | undefined
+  if (!o || typeof o.color !== "string" || !TEXT_COLOR.test(o.color) || typeof o.width !== "number" || !Number.isFinite(o.width) || o.width < 0.5 || o.width > 200) return undefined
+  return { color: o.color, width: Math.round(o.width * 100) / 100 }
 }
 
 /** The kinds a layer fade applies to: the ticker and lower third have their own movement. */
@@ -435,8 +445,9 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
   function layerFrame(l: SceneLayer): SceneLayerFrame {
     const base = { id: l.id, kind: l.kind, box: l.box, crop: l.crop, opacity: l.opacity, ...(l.rotation ? { rotation: l.rotation } : {}) }
     if (l.kind === "feed") return { ...base, ...layerContent(s, output, l) }
-    if (l.kind === "color") return { ...base, color: l.color ?? "#000000", ...(l.gradient ? { gradient: l.gradient } : {}) }
-    if (l.kind === "ellipse") return { ...base, color: l.color ?? "#3157a4", ...(l.gradient ? { gradient: l.gradient } : {}) }
+    const shape = { ...(l.gradient ? { gradient: l.gradient } : {}), ...(l.outline ? { outline: l.outline } : {}), ...(l.corner ? { corner: l.corner } : {}) }
+    if (l.kind === "color") return { ...base, color: l.color ?? "#000000", ...shape }
+    if (l.kind === "ellipse") return { ...base, color: l.color ?? "#3157a4", ...shape }
     if (l.kind === "picture") return { ...base, imageUrl: l.imageUrl ?? null, ...(l.imageDraw ? { imageDraw: l.imageDraw } : {}), ...(preview && !l.imageUrl ? { label: "Choose a picture" } : {}) }
     // A video plays on each output (a window from the media folder, a browser feed from the host), looped and silent.
     if (l.kind === "video") return { ...base, ...(l.videoUrl ? { videoUrl: l.videoUrl } : {}), ...(l.mediaFile ? { mediaFile: l.mediaFile } : {}), ...(preview ? { label: l.videoUrl ? `${l.name} · video` : "Choose a video" } : {}) }

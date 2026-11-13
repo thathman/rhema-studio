@@ -64,5 +64,5 @@ export type {
   ReusableSlide, ReusableSlideInput,
   AudioItemPayload,
 } from "./content"
-export type { CountdownTo, ImageDraw, NoSignal, Scene, SceneClip, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneGradient, SceneLayer, SceneLayerFrame, SceneLayerKind } from "./scene"
+export type { CountdownTo, ImageDraw, NoSignal, Scene, SceneClip, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneGradient, SceneLayer, SceneLayerFrame, SceneLayerKind, SceneOutline } from "./scene"
 export { NO_SIGNALS } from "./scene"

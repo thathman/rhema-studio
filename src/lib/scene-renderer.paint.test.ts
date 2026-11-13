@@ -64,6 +64,35 @@ describe("scene paint on a real canvas", () => {
     expect(differ / (1920 * 1080)).toBeLessThan(0.001)
   })
 
+  it("draws outlines and rounded corners as the Avnac editor does (#448), and scales them with the screen", async () => {
+    const edged: Scene = {
+      ...painted, id: "edged", backgroundGradient: undefined, background: "#0b1a3a",
+      layers: [
+        layer("card", "color", { color: "#3157a4", box: { x: 10, y: 10, w: 40, h: 50 }, corner: 60, outline: { color: "#ffffff", width: 12 } }),
+        layer("ring", "ellipse", { color: "#d14c62", box: { x: 60, y: 20, w: 25, h: 40 }, outline: { color: "#ffffff", width: 8 } }),
+      ],
+    }
+    const [editor, output] = [await drawEditor(edged), drawOutput(edged, 1920, 1080)]
+    const a = ctxOf(editor).getImageData(0, 0, 1920, 1080).data
+    const b = ctxOf(output).getImageData(0, 0, 1920, 1080).data
+    let differ = 0
+    for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
+    expect(differ / (1920 * 1080)).toBeLessThan(0.001)
+    // The card's corner is rounded (the background shows), its edge is white, its middle blue.
+    const card = { x: 192, y: 108, w: 768, h: 540 }
+    expect(near(pixel(output, card.x + 3, card.y + 3), NAVY)).toBe(true)
+    expect(near(pixel(output, card.x + card.w / 2, card.y + 2), WHITE)).toBe(true)
+    expect(near(pixel(output, card.x + card.w / 2, card.y + card.h / 2), BLUE)).toBe(true)
+    // A stored scene keeps them; a bad outline is dropped, never drawn wrong.
+    const stored = normalizeScene({ ...edged, layers: [...edged.layers, layer("bad", "color", { outline: { color: "red", width: 900 } as never, corner: -5 })] })!
+    expect(stored.layers.map((l) => [l.id, l.outline ?? null, l.corner ?? null])).toEqual([["card", { color: "#ffffff", width: 12 }, 60], ["ring", { color: "#ffffff", width: 8 }, null], ["bad", null, null]])
+    // At 1280×720 the outline is two thirds as wide: 4 px either side of the edge, not 6.
+    const small = drawOutput(edged, 1280, 720)
+    const edgeY = Math.round(108 * 2 / 3)
+    expect(near(pixel(small, 1280 * 0.3, edgeY + 3), WHITE)).toBe(true)
+    expect(near(pixel(small, 1280 * 0.3, edgeY + 6), BLUE)).toBe(true)
+  })
+
   it("puts each gradient's colours where the angle says, at 1920×1080 and 1280×720", () => {
     for (const [w, h] of [[1920, 1080], [1280, 720]] as const) {
       const c = drawOutput(painted, w, h)

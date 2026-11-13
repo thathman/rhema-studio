@@ -359,14 +359,23 @@ export function feedLayerFresh(canvas: HTMLCanvasElement, l: Pick<SceneLayerFram
 
 /** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
 function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, span: FrameSpan): void {
-  if (l.kind === "color") {
+  if (l.kind === "color" && !l.corner && !l.outline) {
     ctx.fillStyle = scenePaint(ctx, l.color ?? "#000", l.gradient, r)
     ctx.fillRect(r.x, r.y, r.w, r.h)
-  } else if (l.kind === "ellipse") {
-    ctx.fillStyle = scenePaint(ctx, l.color ?? "#3157a4", l.gradient, r)
+  } else if (l.kind === "color" || l.kind === "ellipse") {
+    // As the editor draws a shape (#448): the path, filled, then its outline centred on the edge;
+    // corners and outline are artboard px, scaled with the frame like text.
+    const k = height / 1080
     ctx.beginPath()
-    ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2)
+    if (l.kind === "ellipse") ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2)
+    else roundedCanvas2DRectPath(ctx, r.x, r.y, r.w, r.h, (l.corner ?? 0) * k)
+    ctx.fillStyle = scenePaint(ctx, l.color ?? (l.kind === "ellipse" ? "#3157a4" : "#000"), l.gradient, r)
     ctx.fill()
+    if (l.outline) {
+      ctx.strokeStyle = l.outline.color
+      ctx.lineWidth = l.outline.width * k
+      ctx.stroke()
+    }
   } else if (l.kind === "picture" && l.imageUrl) {
     const img = opts.image(l.imageUrl)
     if (img && img.naturalWidth > 0 && l.imageDraw) drawEditorPicture(ctx, img, l.imageDraw, r)
