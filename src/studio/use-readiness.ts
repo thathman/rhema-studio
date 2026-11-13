@@ -28,7 +28,7 @@ import { themeIdsOf } from "@/lib/output-themes"
 import { useRouterHealth } from "@/lib/cameras"
 import { cameraHealth, cameraWords, useFeedHealthStore } from "@/lib/show-health"
 import { invoke } from "@tauri-apps/api/core"
-import { lookCounting } from "@/lib/countdown-display"
+import { lookCounting, NO_ITEM_TIMER } from "@/lib/countdown-display"
 import { presenceRows, readHostStatus, type HostStatus } from "@/lib/host-presence"
 import { roleLabel } from "@/lib/remote-roles"
 import { useAuxTimers } from "@/stores/aux-timers-store"
@@ -247,7 +247,8 @@ export function useReadiness() {
       const shows = outputs.filter((o) => o.role === "stage" && o.stageLayout === "countdown" && outputOnAir(o, outputStatus[o.id]))
       if (shows.length === 0) return []
       const c = lookCounting(countdownLook, countdownSources, serviceTimer, monotonicNow(), now, zone, countdownTargets)
-      return c.idle ? shows.map((o) => ({ output: o.name, why: c.idle! })) : []
+      // An item set to no timer (#196) shows a dash by choice: not something to fix.
+      return c.idle && c.idle !== NO_ITEM_TIMER ? shows.map((o) => ({ output: o.name, why: c.idle! })) : []
     })(),
     timersOwnerAway: (() => {
       if (!watchDesks || !host?.running) return []

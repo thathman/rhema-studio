@@ -204,7 +204,7 @@ export interface ItemTiming {
   milestone?: boolean
   soft_end_minutes?: number
   warn_minutes?: number
-  /** How countdown displays show this item's time (#196): counting down (absent), up, or no timer. */
+  /** How a countdown display counting "the item on now" shows this item's time (#196): down (absent), up, or no timer. Not an event's moments: an event counts down. */
   timer?: "up" | "none"
 }
 

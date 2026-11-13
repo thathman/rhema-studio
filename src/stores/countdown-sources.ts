@@ -20,8 +20,11 @@ function push() {
   const timers = useAuxTimers.getState().timers
   const current = useQueueStore.getState().items.find((i) => i.id === useEventClock.getState().currentMomentId)
   const warn = itemWarnMs(current)
-  // The item on now, counted as its own timer says (#196): down, up or not at all.
-  const item = itemCounting(lastTiming, cleanItemTiming(current?.timing)?.timer)
+  // The item being counted, timed as its own timer says (#196): the timing's live row, an item
+  // (an event row has no setting of its own, so it counts down).
+  const liveId = lastTiming?.events.find((e) => e.state === "live")?.id
+  const counted = liveId ? useQueueStore.getState().items.find((i) => i.id === liveId) : undefined
+  const item = itemCounting(lastTiming, cleanItemTiming(counted?.timing)?.timer)
   // The timers as they stand (not as counted now), so a resend happens only on a real change.
   const key = JSON.stringify([timers.map((t) => [t.label, t.timer]), timing, item, warn])
   if (key === last) return
@@ -39,5 +42,3 @@ export function updateCountdownTiming(t: ServiceTiming | null): void {
 
 useAuxTimers.subscribe((s, prev) => { if (s.timers !== prev.timers) push() })
 useEventClock.subscribe((s, prev) => { if (s.currentId !== prev.currentId || s.currentMomentId !== prev.currentMomentId) push() })
-// The item on now's own timer changed in Prepare (#196): counted the new way at once.
-useQueueStore.subscribe((s, prev) => { if (s.items !== prev.items) push() })

@@ -29,3 +29,18 @@ describe("an item's own timer (#196)", () => {
     expect(lookCounting(look, sources, timer, 0, 0).idle).toContain("no timer")
   })
 })
+
+describe("the countdown sources follow the counted row's own timer (#196)", () => {
+  it("reads the setting from the item the timing counts, not the moment inside an event", async () => {
+    const { useQueueStore } = await import("@/stores/queue-store")
+    const { useBroadcastStore } = await import("@/stores/broadcast-store")
+    const { updateCountdownTiming } = await import("@/stores/countdown-sources")
+    useQueueStore.setState({ items: [{ id: "sermon", kind: "slide", slide: { title: "Sermon", body: "" }, reference: "Sermon", confidence: 1, source: "manual", added_at: 0, timing: { timer: "up" } }] as never })
+    const t = { start: 0, events: [{ id: "sermon", state: "live", label: "Sermon", plannedStart: 0, plannedEnd: 1_800_000, actualStart: 5_000, hardStop: null }] }
+    updateCountdownTiming(t as never)
+    expect(useBroadcastStore.getState().countdownSources.item).toMatchObject({ totalMs: 0, endsAt: 5_000 })
+    // An event row (no item of that id) counts down.
+    updateCountdownTiming({ ...t, events: [{ ...t.events[0], id: "worship-event" }] } as never)
+    expect(useBroadcastStore.getState().countdownSources.item).toMatchObject({ totalMs: 1_800_000 })
+  })
+})

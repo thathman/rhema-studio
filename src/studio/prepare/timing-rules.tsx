@@ -64,7 +64,7 @@ export function TimingRules({ item }: { item: QueueItem }) {
             </label>
             {/* How a countdown display shows this item's time (#196). */}
             <label className="min-w-0">
-              <span className={label}>Its timer</span>
+              <span className={label} title="On countdown displays that count the item on now; the service timer and stage warnings are unchanged">Countdown display</span>
               <select
                 aria-label={`How countdown displays time ${item.reference}`}
                 value={rules?.timer ?? ""}

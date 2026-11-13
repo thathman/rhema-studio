@@ -363,12 +363,15 @@ export function lookCounting(
  * The item on now as counting (from the run of show's timing): its planned minutes from when it
  * went on air, cut short by its "end by". None when nothing is on, or it has no minutes planned.
  */
+/** Why a countdown on "the item on now" shows a dash when that item asked for no timer: a choice, not a fault. */
+export const NO_ITEM_TIMER = "This item has no timer (Prepare → Timing)"
+
 export function itemCounting(timing: { events: readonly { state: string; label: string; plannedStart: number; plannedEnd: number; actualStart: number | null; hardStop: number | null }[] } | null, timer?: "up" | "none"): Counting | null {
   const live = timing?.events.find((e) => e.state === "live")
   if (!live) return null
   // The item's own timer (#196): none, or counting up from its start (no end: the display shows
   // the time since, as it does past a count with nothing to count to).
-  if (timer === "none") return { label: live.label, totalMs: 0, endsAt: null, leftMs: 0, idle: "This item has no timer (Prepare → Timing)" }
+  if (timer === "none") return { label: live.label, totalMs: 0, endsAt: null, leftMs: 0, idle: NO_ITEM_TIMER }
   if (timer === "up") return { label: live.label, totalMs: 0, endsAt: live.actualStart, leftMs: 0 }
   const planned = live.plannedEnd - live.plannedStart
   if (!(planned > 0)) return null
