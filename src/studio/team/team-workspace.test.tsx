@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: vi.fn(async () => "0.4.0") }))
 
-const { TeamWorkspace } = await import("./team-workspace")
+const { TeamSections } = await import("./team-workspace")
 const { useSettingsStore } = await import("@/stores/settings-store")
 const { useSettingsDialogStore } = await import("@/lib/settings-dialog")
 const { useShellStore } = await import("@/studio/shell-store")
@@ -27,7 +27,7 @@ beforeEach(async () => {
   host = document.createElement("div")
   document.body.append(host)
   root = createRoot(host)
-  await act(async () => root.render(<TeamWorkspace />))
+  await act(async () => root.render(<TeamSections />))
 })
 
 afterEach(async () => {
@@ -35,7 +35,7 @@ afterEach(async () => {
   host.remove()
 })
 
-describe("Team", () => {
+describe("People & access: team sections", () => {
   it("sends both church-folder buttons to Settings → Data and sync, not History (#814)", async () => {
     await act(async () => button("Share through the church folder").click())
     expect(useSettingsDialogStore.getState()).toMatchObject({ isOpen: true, activeSection: "data" })
@@ -44,23 +44,6 @@ describe("Team", () => {
     useSettingsDialogStore.setState({ isOpen: false, activeSection: "audio" })
     await act(async () => button("Set up").click())
     expect(useSettingsDialogStore.getState()).toMatchObject({ isOpen: true, activeSection: "data" })
-  })
-
-  it("shows the approval rule and links to Permissions, where its switch now is (#815)", async () => {
-    expect(host.querySelector('input[type="checkbox"]')).toBeNull()
-    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("Ask before showing an unapproved service: on")
-    await act(async () => button("Change in Permissions").click())
-    expect(useShellStore.getState().goRequest).toBe("permissions")
-    expect(useSettingsStore.getState().requireApproval).toBe(true)
-  })
-
-  it("on a joined desk shows the main computer's approval rule from Live State, not this desk's own (#815)", async () => {
-    await act(async () => useJoin.setState({ status: "connected", me: { name: "Bible desk", role: "viewer", outputScope: [], groupTakeScope: [] }, live: { requireApproval: false } as never }))
-    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("Ask before showing an unapproved service: off (the main computer’s setting)")
-    await act(async () => useJoin.setState({ live: null }))
-    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("not shared by the main computer yet")
-    await act(async () => useJoin.setState({ status: "off", me: null, live: null }))
-    expect(host.querySelector("#team-approval-policy")?.textContent).toContain("Ask before showing an unapproved service: on")
   })
 
   it("shows the operator's name without editing it, and opens the Desk menu to change it (#802)", async () => {

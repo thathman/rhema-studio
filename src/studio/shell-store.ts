@@ -6,6 +6,8 @@ export type Workspace = "home" | "prepare" | "present" | "production" | "library
 /** `production` is a saved-route/deep-link alias; Live is the single canonical workspace. */
 export function canonicalWorkspace(workspace: Workspace): Workspace {
   if (workspace === "production") return "present"
+  // Team folded into People & access (UX audit slice 7); old links and saved prefs land there.
+  if (workspace === "team") return "permissions"
   // A name from outside the app's own code (an old link, a script, a remote request) that is not a
   // workspace opens Home rather than taking the whole main window down (12 Nov device round).
   return (WORKSPACES as readonly string[]).includes(workspace) ? workspace : "home"

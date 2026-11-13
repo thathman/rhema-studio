@@ -135,9 +135,9 @@ export function HostNotices({ compact = false }: { compact?: boolean }) {
         <button
           type="button"
           className="mt-2 text-[0.6875rem] text-muted-foreground underline"
-          onClick={() => useShellStore.getState().goTo("team")}
+          onClick={() => useShellStore.getState().goTo("permissions")}
         >
-          Team activity: approvals and comments
+          People & access: approvals and comments
         </button>
       </PopoverContent>
     </Popover>

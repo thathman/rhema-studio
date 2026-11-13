@@ -144,6 +144,8 @@ describe("an unknown workspace name", () => {
   it("opens Home instead of a page that does not exist; production still means Live", () => {
     expect(canonicalWorkspace("live" as never)).toBe("home")
     expect(canonicalWorkspace("" as never)).toBe("home")
+    // Team folded into People & access (UX audit slice 7).
+    expect(canonicalWorkspace("team")).toBe("permissions")
     expect(canonicalWorkspace("production")).toBe("present")
     expect(canonicalWorkspace("design")).toBe("design")
   })

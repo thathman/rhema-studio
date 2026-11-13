@@ -277,7 +277,7 @@ describe("Prepare → Permissions → Live journey", () => {
     expect(useBibleStore.getState().selectedQueueItemId).toBe("moment-1")
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
-    await act(async () => navButton("Permissions").click())
+    await act(async () => navButton("People & access").click())
     expect(host.textContent).toContain("Approval Requests")
     await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied" }])
@@ -343,7 +343,7 @@ describe("Prepare → Permissions → Live journey", () => {
     expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 5 })
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
-    await act(async () => navButton("Permissions").click())
+    await act(async () => navButton("People & access").click())
     expect(host.textContent).toContain("revision 5")
     await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied", payload: { revision: 5 } }])
@@ -486,7 +486,7 @@ describe("Prepare → Permissions → Live journey", () => {
     expect(useServiceStore.getState().current).toMatchObject({ revision: 5, approved_revision: 5 })
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
-    await act(async () => navButton("Permissions").click())
+    await act(async () => navButton("People & access").click())
     expect(host.textContent).toContain("revision 5")
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click()
