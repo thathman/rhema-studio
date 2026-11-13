@@ -23,6 +23,7 @@ import { useNearbyConnection } from "./connections-store"
 import { cn } from "@/lib/utils"
 import { DEVICE_STAGES, deviceStage, nextStep, type DeviceStage } from "./device-stage"
 import { openPermissions } from "@/studio/permissions/navigation"
+import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
 
 type NearbyDevice = { name: string; address: string }
 type Scan = { tvs: NearbyDevice[] | null; hosts: NearbyDevice[] | null; tvError: string | null; hostError: string | null }
@@ -256,8 +257,10 @@ export function ConnectionsWorkspace() {
                     action={isHost && device ? <RevokeAction label={device.name} what={`${device.name} stops reading the cameras now and must pair again. OBS and the room screens are not switched.`} onRevoke={() => void useSettingsStore.getState().revokeRemoteDevice(device.hash)} /> : undefined} />)}
                 </ul>
               )}
+              {/* The one home for connecting OBS (UX audit S2): Live's OBS tool shows the same form while it is off. */}
+              {isHost && <ObsSettingsBlock />}
               <p className="text-muted-foreground">OBS changes never switch the congregation screens. The same named camera streams can be read by either production.</p>
-              <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => openProductionTab("obs")}><RadioIcon /> Manage OBS</Button><Button size="sm" variant="ghost" onClick={openPermissions}>Permissions and roles</Button></div>
+              <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => openProductionTab("obs")}><RadioIcon /> OBS scenes on Live</Button><Button size="sm" variant="ghost" onClick={openPermissions}>Permissions and roles</Button></div>
             </Card>
           </div>
         </section>

@@ -1,9 +1,9 @@
 import { useId, useLayoutEffect, useRef, useState } from "react"
-import { ArrowRightLeftIcon, CircleIcon, EyeIcon, FlagIcon, RefreshCwIcon, SettingsIcon, SquareIcon } from "lucide-react"
+import { ArrowRightLeftIcon, CircleIcon, EyeIcon, FlagIcon, RefreshCwIcon, SquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { openSettings } from "@/lib/settings-dialog"
+import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
 import { congregationProgramName, onlineProgramName } from "@/lib/program-names"
 import { OBS_REHEARSAL_REASON, useObsStore } from "@/stores/obs-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -249,14 +249,19 @@ export function ObsPanel() {
           These are OBS's own scenes, the switcher for the stream. They are separate from Rhema Studio's congregation scenes in Live → Production tools → Scenes, the {congregationProgramName(outputs)}: taking a scene to the screens, or a verse or song going live, never changes OBS. Only the buttons here do.
         </p>
         {!enabled ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-2.5 py-2">
-            <span className="min-w-0 flex-1">OBS is not connected. Turn it on and give its address and password in Settings → Remote Control.</span>
-            <Button size="sm" variant="outline" onClick={() => openSettings("remote")}><SettingsIcon /> Open Remote Control</Button>
+          // Connect OBS here (UX audit S2): the same form as Connections, not a trip to Settings.
+          <div className="flex flex-col gap-2">
+            <p>OBS is not connected. Tick Connect, give OBS's address and password (in OBS: Tools → WebSocket Server Settings), then Save.</p>
+            <ObsSettingsBlock />
           </div>
         ) : !connected ? (
           <div className="flex flex-col gap-2">
             <p role="status">{status === "connecting" ? "Connecting to OBS…" : `Not connected${error ? `: ${error}` : ""}. Rhema Studio keeps trying every 15 seconds.`}</p>
             <Button size="sm" variant="outline" className="w-fit" onClick={() => void obs.connect()}><RefreshCwIcon /> Try now</Button>
+            <details>
+              <summary className="cursor-pointer text-muted-foreground">Change OBS's address or password</summary>
+              <div className="mt-2"><ObsSettingsBlock /></div>
+            </details>
           </div>
         ) : (
           <>

@@ -117,14 +117,14 @@ export function preflightChecks(i: ReadinessInput): ReadinessCheck[] {
   const out: ReadinessCheck[] = []
   if (i.obs) {
     const o = i.obs
-    if (!o.enabled) out.push({ id: "obs", status: "info", label: "OBS is not connected (optional)", detail: "Rhema Studio runs the service without OBS. Connect it in Settings → Remote Control to see its scenes, stream and recording here.", fix: "obs", fixLabel: "Open OBS" })
+    if (!o.enabled) out.push({ id: "obs", status: "info", label: "OBS is not connected (optional)", detail: "Rhema Studio runs the service without OBS. Connect it in Connections → OBS to see its scenes, stream and recording here.", fix: "obs", fixLabel: "Open OBS" })
     else if (o.status === "connected") {
       const on = `${o.label ? ` (${o.label})` : ""}`
       const live = o.stream?.active === true
       if (o.rehearsal && live) out.push({ id: "obs", status: "warn", label: `OBS${on} is streaming while you rehearse`, detail: "Rehearsal stays on this computer, but OBS is live: what its scenes show goes out. Stop the stream in OBS if this is only practice.", fix: "obs", fixLabel: "Open OBS" })
       else out.push({ id: "obs", status: "ok", label: `OBS connected${on}`, detail: `Stream: ${streamWords(o.stream).text}. Recording: ${recordWords(o.record).text}.` })
     } else if (o.status === "connecting") out.push({ id: "obs", status: "info", label: "Connecting to OBS…" })
-    else out.push({ id: "obs", status: "warn", label: `OBS${o.label ? ` (${o.label})` : ""} is not connected`, detail: `${o.error ? `${o.error}. ` : ""}Rhema Studio keeps trying every 15 seconds; OBS's own stream is not affected. Check OBS is open on that computer, or use another saved OBS in Settings.`, fix: "obs", fixLabel: "Open OBS" })
+    else out.push({ id: "obs", status: "warn", label: `OBS${o.label ? ` (${o.label})` : ""} is not connected`, detail: `${o.error ? `${o.error}. ` : ""}Rhema Studio keeps trying every 15 seconds; OBS's own stream is not affected. Check OBS is open on that computer, or change its address in Connections → OBS.`, fix: "obs", fixLabel: "Open OBS" })
   }
   if (i.lan) {
     const { now, atLastService: was } = i.lan
