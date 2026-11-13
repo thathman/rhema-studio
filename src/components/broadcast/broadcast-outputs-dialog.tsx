@@ -205,7 +205,7 @@ export function BroadcastOutputsDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="gap-4 sm:max-w-[840px]">
           <DialogHeader>
-            <DialogTitle>Broadcast</DialogTitle>
+            <DialogTitle>Outputs</DialogTitle>
             <DialogDescription>
               Manage your outputs — external displays and NDI feeds all show the current live
               verse, each with its own theme.

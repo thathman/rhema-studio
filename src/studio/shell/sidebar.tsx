@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react"
-import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
+import { PanelLeftCloseIcon, PanelLeftOpenIcon, SettingsIcon } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { PRODUCT_NAMES } from "@/lib/brand"
@@ -123,6 +123,10 @@ export function Sidebar({
         {church.map((item) => <NavButton key={item.id} item={item} compact={compact} active={item.workspace === workspace} onSelect={() => (item.workspace ? onWorkspace(item.workspace) : item.onSelect?.())} />)}
       </Group>
       <div className="mt-auto flex flex-col px-[11px] pt-4 pb-[15px]">
+        {/* Settings has its own row (UX audit §3.1), not only a line in the desk menu. */}
+        <div className="-mx-[11px] mb-1">
+          <NavButton item={{ id: "settings", label: "Settings", icon: <SettingsIcon />, key: "," }} compact={compact} active={workspace === "settings"} onSelect={onSettings} />
+        </div>
         {/* A narrow window is icons only anyway, so the button is not offered there. */}
         <Tooltip>
           <TooltipTrigger asChild>

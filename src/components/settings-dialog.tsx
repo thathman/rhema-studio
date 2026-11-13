@@ -86,7 +86,7 @@ const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
     icon: <TvIcon strokeWidth={2} />,
   },
   {
-    name: "Remote Control",
+    name: "Network & remote access",
     id: "remote",
     icon: <RadioIcon strokeWidth={2} />,
   },
@@ -609,7 +609,7 @@ const sectionTitles: Record<NavSection, string> = {
   speech: "Speech Recognition",
   bible: "Bible Translation",
   display: "Heard verses",
-  remote: "Remote Control",
+  remote: "Network & remote access",
   diagnostics: "Diagnostics",
   help: "Help",
 }
