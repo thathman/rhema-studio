@@ -1,11 +1,11 @@
 import { imageCacheVersion } from "@/lib/theme-image-cache"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
-import { clockText } from "@/lib/scenes"
+import { clockText, EFFECT_KINDS } from "@/lib/scenes"
 import { drawTicker } from "@/lib/ticker-draw"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { drawBars, drawStatic, noSignalOf } from "@/lib/no-signal"
 import { layerTurns, turnAbout } from "@/lib/scene-rotation"
-import { applyCanvas2DClipPath, paintCanvas2DStyle, roundedCanvas2DRectPath } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
+import { applyCanvas2DClipPath, applyCanvas2DEffects, paintCanvas2DStyle, roundedCanvas2DRectPath } from "@/vendor/avnac/renderer/backends/canvas2d/shared"
 import { textLineHeight } from "@/vendor/avnac/saraswati/utils/text"
 import type { ImageDraw, LowerThird, SceneFrame, SceneGradient, SceneLayerFrame, Ticker } from "@/types"
 
@@ -211,15 +211,19 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
   // Text saved before `textWiden` is drawn by exactly the calls it always was: clipped to its box
   // first. Widened text is clipped to its block, which the layout measures.
   const widens = !!widening(layer)
+  // A shadow and a blur fall outside the words (#448): the clip leaves room for them, as the
+  // editor (which does not clip text) shows them.
+  const k = frameHeight / 1080
+  const room = (layer.shadow ? Math.max(Math.abs(layer.shadow.x), Math.abs(layer.shadow.y)) + layer.shadow.blur : 0) * k + (layer.blur ? layer.blur * 0.4 * 3 : 0) * k
   if (!widens) {
     ctx.beginPath()
-    ctx.rect(r.x, r.y, r.w, r.h)
+    ctx.rect(r.x - room, r.y - room, r.w + 2 * room, r.h + 2 * room)
     ctx.clip()
   }
   const { fontSize, align, step, left: x0, width: w, lines } = staticTextLayout(ctx, layer, r, frameHeight, span)
   if (widens) {
     ctx.beginPath()
-    ctx.rect(x0, r.y, w, r.h)
+    ctx.rect(x0 - room, r.y - room, w + 2 * room, r.h + 2 * room)
     ctx.clip()
   }
   ctx.fillStyle = color
@@ -523,8 +527,24 @@ export function drawScene(ctx: CanvasRenderingContext2D, canvasWidth: number, ca
     // A turned layer (#851 G7) turns about the point the design editor turns it about.
     if (layerTurns(l.kind) && l.rotation) turnAbout(ctx, layerPivot(ctx, l, r, height, span), l.rotation)
     ctx.globalAlpha = l.opacity
+    // Its shadow and blur (#448), as the editor sets them before drawing a node: sizes are artboard
+    // px, scaled with the frame (a canvas shadow ignores the transform). A fading layer gets them
+    // when its finished picture is drawn here: the same outside it, though a part's shadow on
+    // another part of the same layer (an outline on its own fill) is not drawn while it fades.
+    const fx = (l.shadow || l.blur) && EFFECT_KINDS.has(l.kind)
+    if (fx) {
+      const k = height / 1080
+      applyCanvas2DEffects(ctx, {
+        shadow: l.shadow ? { colorHex: l.shadow.color, opacityPct: l.shadow.opacity * 100, blur: l.shadow.blur * k, offsetX: l.shadow.x * k, offsetY: l.shadow.y * k } : null,
+        blur: 0,
+      })
+      // The editor's blur: its 0–100 amount × 0.4 px, here scaled with the frame (a 4K screen blurs
+      // twice as many pixels; clamping before scaling would blur it less than the editor shows).
+      if (l.blur) ctx.filter = `blur(${(Math.min(100, l.blur) * 0.4 * k).toFixed(2)}px)`
+    }
     if (opts.fader && l.fadeMs && !opts.preview && !opts.cameraBelow?.(l.id)) paintFading(ctx, l, r, height, opts, opts.fader, span)
     else paintLayer(ctx, l, r, height, opts, span)
+    if (fx) applyCanvas2DEffects(ctx, { shadow: null, blur: 0 })
     if (opts.preview && l.label) {
       ctx.globalAlpha = 1
       ctx.globalCompositeOperation = "source-over"

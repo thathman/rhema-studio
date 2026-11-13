@@ -629,12 +629,12 @@ Planned additions to remote control:
 
 For issues or questions:
 - Check the main [README](../README.md)
-- Consult [Whisper Documentation](./whisper.md) for transcription setup
+- For transcription setup, see Settings → Speech Recognition in Rhema Studio
 - Report bugs on GitHub
 - Check logs in Console.app (macOS) or terminal output
 
 ---
 
 **Next Steps:**
-- Learn about [Whisper Transcription](./whisper.md) for local speech-to-text
+- Set up local speech-to-text (Whisper) in Settings → Speech Recognition
 - See [README](../README.md) for general usage and setup
