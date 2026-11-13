@@ -409,6 +409,35 @@ describe("Production control", () => {
     const panel = el.querySelector('[role="tabpanel"]')!
     expect(panel.textContent).toContain("OBS program")
     expect(panel.textContent).toContain("separate from Rhema Studio's congregation scenes")
-    expect(panel.textContent).toContain("Open Remote Control") // OBS off: where to turn it on
+    // OBS off: the connection form is right here (UX audit S2), not a trip to Settings.
+    expect(panel.textContent).not.toContain("Open Remote Control")
+    expect(panel.querySelector('[aria-label="OBS address"]')).not.toBeNull()
+    // Following its own words: type an address, then tick Connect. The same form stays, with what was typed.
+    const address = panel.querySelector('[aria-label="OBS address"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(address, "10.0.0.9")
+      address.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    const connect = [...panel.querySelectorAll('input[type="checkbox"]')].find((c) => c.closest("label")?.textContent?.includes("Connect to OBS")) as HTMLInputElement
+    await act(async () => connect.click())
+    const after = el.querySelector('[role="tabpanel"] [aria-label="OBS address"]') as HTMLInputElement
+    expect(after).toBe(address)
+    expect(after.value).toBe("10.0.0.9")
+    await act(async () => useSettingsStore.getState().setObs({ enabled: false }))
+  })
+
+  it("a computer joined to a main computer is told OBS is run there, not offered the form", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const { useJoin } = await import("@/stores/join-store")
+    useJoin.setState({ status: "joined" } as never)
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el))
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "OBS") as HTMLButtonElement
+    await act(async () => tab.click())
+    const panel = el.querySelector('[role="tabpanel"]')!
+    expect(panel.querySelector('[aria-label="OBS address"]')).toBeNull()
+    expect(panel.textContent).toContain("joined a main computer")
+    useJoin.setState({ status: "off" } as never)
   })
 })

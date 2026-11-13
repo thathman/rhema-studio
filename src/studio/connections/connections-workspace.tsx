@@ -23,6 +23,7 @@ import { useNearbyConnection } from "./connections-store"
 import { cn } from "@/lib/utils"
 import { DEVICE_STAGES, deviceStage, nextStep, type DeviceStage } from "./device-stage"
 import { openPermissions } from "@/studio/permissions/navigation"
+import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
 
 type NearbyDevice = { name: string; address: string }
 type Scan = { tvs: NearbyDevice[] | null; hosts: NearbyDevice[] | null; tvError: string | null; hostError: string | null }
@@ -33,9 +34,9 @@ function errorWords(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function Card({ title, kicker, icon, count, children }: { title: string; kicker: string; icon: React.ReactNode; count?: number; children: React.ReactNode }) {
+function Card({ title, kicker, icon, count, id, children }: { title: string; kicker: string; icon: React.ReactNode; count?: number; id?: string; children: React.ReactNode }) {
   return (
-    <section aria-label={title} className="flex min-w-0 flex-col rounded-lg border border-border bg-card shadow-panel">
+    <section id={id} aria-label={title} className="flex min-w-0 flex-col rounded-lg border border-border bg-card shadow-panel">
       <header className="flex items-start gap-3 border-b border-border bg-surface-elevated px-4 py-3">
         <span aria-hidden className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-kind-other text-kind-other-foreground [&_svg]:size-4">{icon}</span>
         <div className="min-w-0 flex-1">
@@ -247,7 +248,7 @@ export function ConnectionsWorkspace() {
               <Button size="sm" variant="outline" onClick={openPermissions}>Permissions and roles</Button>
             </Card>
 
-            <Card title="OBS computers" kicker="Online production · separate from room screens" icon={<RadioIcon />} count={obsComputers.length}>
+            <Card id="connections-obs" title="OBS computers" kicker="Online production · separate from room screens" icon={<RadioIcon />} count={obsComputers.length}>
               <Row title="OBS on this computer" detail={obsEnabled ? "Local OBS connection" : "Optional; not configured"} state={!obsEnabled ? "Not set up" : obsStatus === "connected" ? "Connected" : obsStatus === "connecting" ? "Connecting" : "Not connected"} tone={obsEnabled && obsStatus === "connected" ? "ok" : obsEnabled ? "warn" : "off"} />
               {obsComputers.length === 0 ? <p className="text-muted-foreground">No OBS Companion computer is paired. OBS streaming and scene switching remain its own online production.</p> : (
                 <ul aria-label="Paired OBS companion computers">
@@ -256,8 +257,10 @@ export function ConnectionsWorkspace() {
                     action={isHost && device ? <RevokeAction label={device.name} what={`${device.name} stops reading the cameras now and must pair again. OBS and the room screens are not switched.`} onRevoke={() => void useSettingsStore.getState().revokeRemoteDevice(device.hash)} /> : undefined} />)}
                 </ul>
               )}
+              {/* The one home for connecting OBS (UX audit S2): Live's OBS tool shows the same form while it is off. */}
+              {isHost && <ObsSettingsBlock />}
               <p className="text-muted-foreground">OBS changes never switch the congregation screens. The same named camera streams can be read by either production.</p>
-              <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => openProductionTab("obs")}><RadioIcon /> Manage OBS</Button><Button size="sm" variant="ghost" onClick={openPermissions}>Permissions and roles</Button></div>
+              <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => openProductionTab("obs")}><RadioIcon /> OBS scenes on Live</Button><Button size="sm" variant="ghost" onClick={openPermissions}>Permissions and roles</Button></div>
             </Card>
           </div>
         </section>

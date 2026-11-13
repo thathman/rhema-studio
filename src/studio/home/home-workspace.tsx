@@ -43,7 +43,8 @@ export function HomeWorkspace() {
   const fix = (f: ReadinessFix) => {
     if (f === "outputs") openOutputs()
     else if (f === "prepare") setWorkspace("prepare")
-    else if (f === "cameras" || f === "obs") openConnectionsHub()
+    else if (f === "obs") openConnectionsHub("obs")
+    else if (f === "cameras") openConnectionsHub()
     else openSettings("diagnostics")
   }
 

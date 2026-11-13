@@ -5,7 +5,6 @@ import { AssistantsSection } from "@/components/settings/assistants-section"
 import { ListenOutputSettings } from "@/components/settings/listen-output-settings"
 import { ChurchProfileSection } from "@/components/settings/church-profile-section"
 import { AppearanceSection } from "@/components/settings/appearance-section"
-import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
 import { RemoteAuthSetting } from "@/components/settings/remote-auth-setting"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { transcriptionActions } from "@/hooks/use-transcription"
@@ -927,7 +926,10 @@ function RemoteControlSection() {
         <div className="min-w-0 flex-1"><p className="font-semibold">Paired device access</p><p className="text-muted-foreground">Manage roles and pause control in Permissions. Pair new devices and revoke them in Connections.</p></div>
         <Button size="sm" variant="outline" onClick={() => { useSettingsDialogStore.getState().closeSettings(); useShellStore.getState().goTo("permissions") }}>Manage access</Button>
       </div>
-      <ObsSettingsBlock />
+      <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3 text-xs">
+        <div className="min-w-0 flex-1"><p className="font-semibold">OBS</p><p className="text-muted-foreground">Connect OBS, and see its status, in Connections.</p></div>
+        <Button size="sm" variant="outline" onClick={() => { useSettingsDialogStore.getState().closeSettings(); openConnectionsHub("obs") }}>Open OBS in Connections</Button>
+      </div>
       {/* OSC */}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

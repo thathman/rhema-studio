@@ -48,7 +48,7 @@ export function TeamWorkspace() {
             <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Your studio. Your people.</h1>
             <p className="mt-1 text-xs text-muted-foreground">Share the preparation. Keep the live production computer fully in control.</p>
           </div>
-          <Button variant="outline" onClick={openConnectionsHub}><NetworkIcon /> Connections</Button>
+          <Button variant="outline" onClick={() => openConnectionsHub()}><NetworkIcon /> Connections</Button>
         </header>
         {/* A plain card, like the others (#215): what sharing means, and the two ways to start. */}
         <section aria-label="Working together" className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card p-5 shadow-panel">
@@ -58,7 +58,7 @@ export function TeamWorkspace() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={openChurchFolder}><FolderSyncIcon /> Share through the church folder</Button>
-            <Button variant="outline" onClick={openConnectionsHub}><SmartphoneIcon /> Connect a phone or device</Button>
+            <Button variant="outline" onClick={() => openConnectionsHub()}><SmartphoneIcon /> Connect a phone or device</Button>
           </div>
         </section>
 

@@ -64,6 +64,13 @@ afterEach(async () => {
 })
 
 describe("Connections hub (#401)", () => {
+  it("is where OBS is connected: the address and password form sits in the OBS card (UX audit S2)", async () => {
+    await mount()
+    const address = host.querySelector('[aria-label="OBS address"]')
+    expect(address).not.toBeNull()
+    expect(host.textContent).toContain("OBS scenes on Live")
+  })
+
   it("has one Pair a device entry, and each explanation tile points to it (#861)", async () => {
     await mount()
     const buttons = [...host.querySelectorAll("button")].map((button) => button.textContent)
