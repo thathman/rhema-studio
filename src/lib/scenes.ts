@@ -257,6 +257,9 @@ export function normalizeScene(raw: unknown): Scene | null {
       textAlign: l.textAlign === "left" || l.textAlign === "right" ? l.textAlign : "center" as const,
       lineHeight: clamp(l.lineHeight, 0.5, 3, 1.2),
       textColor: typeof l.textColor === "string" && TEXT_COLOR.test(l.textColor) ? l.textColor : "#ffffff",
+      // A text gradient or outline Rhema cannot draw is dropped: the words are drawn in their colour (#448).
+      textGradient: normalizeGradient(l.textGradient),
+      textOutline: sceneOutline(l.textOutline),
       underline: l.underline === true,
       ...(l.textWiden === "right" || l.textWiden === "both" || l.textWiden === "left" ? { textWiden: l.textWiden } : {}),
     } : {}
@@ -410,7 +413,7 @@ function contentKey(f: SceneLayerFrame): string {
   if (f.kind === "camera") return f.cameraUrl ?? f.fallback ?? ""
   // A clock's time moves by itself: only starting, stopping or a different kind of clock is new.
   if (f.kind === "clock") return f.clock?.mode ?? ""
-  if (f.kind === "text") return fingerprint(JSON.stringify([f.text, f.fontFamily, f.fontSize, f.fontWeight, f.fontStyle, f.textAlign, f.lineHeight, f.textColor, f.underline, f.textWiden]))
+  if (f.kind === "text") return fingerprint(JSON.stringify([f.text, f.fontFamily, f.fontSize, f.fontWeight, f.fontStyle, f.textAlign, f.lineHeight, f.textColor, f.textGradient, f.textOutline, f.underline, f.textWiden]))
   return f.gradient || f.outline || f.corner ? fingerprint(JSON.stringify([f.gradient, f.color, f.outline, f.corner])) : (f.color ?? "")
 }
 
@@ -489,6 +492,8 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
         textAlign: l.textAlign ?? "center",
         lineHeight: l.lineHeight ?? 1.2,
         textColor: l.textColor ?? "#ffffff",
+        ...(l.textGradient ? { textGradient: l.textGradient } : {}),
+        ...(l.textOutline ? { textOutline: l.textOutline } : {}),
         underline: l.underline ?? false,
         ...(l.textWiden ? { textWiden: l.textWiden } : {}),
       }

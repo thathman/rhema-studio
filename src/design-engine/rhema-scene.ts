@@ -107,9 +107,9 @@ function toNode(layer: SceneLayer): SaraswatiNode {
       textAlign: layer.textAlign ?? "center",
       lineHeight: layer.lineHeight ?? 1.2,
       underline: layer.underline ?? false,
-      color: { type: "solid", color: layer.textColor ?? "#ffffff" },
-      stroke: null,
-      strokeWidth: 0,
+      color: layer.textGradient ? gradientPaint(layer.textGradient) : { type: "solid", color: layer.textColor ?? "#ffffff" },
+      stroke: layer.textOutline ? { type: "solid", color: layer.textOutline.color } : null,
+      strokeWidth: layer.textOutline?.width ?? 0,
     }
     return text
   }
@@ -349,9 +349,14 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
           issues.push({ nodeId: node.id, message })
           compatible = false
         }
-        if (node.color.type !== "solid") refuse("Text gradients and non-hex colours cannot be used in Rhema scene output yet")
-        else if (!TEXT_COLOR.test(node.color.color)) refuse("Text gradients and non-hex colours cannot be used in Rhema scene output yet")
-        if (node.stroke || node.strokeWidth !== 0 || node.clipPath || (node.clipPathStack?.length ?? 0) > 0) refuse("Text stroke and clipping cannot be used in Rhema scene output yet")
+        // Words in a colour or a gradient, with an outline (#448), as the editor paints them.
+        const textGradient = node.color.type === "gradient" ? normalizeGradient(node.color) : undefined
+        if (node.color.type === "gradient" && !textGradient) refuse(`This text gradient cannot be drawn on Rhema outputs: ${gradientIssue(node.color)}`)
+        else if (node.color.type === "solid" && !TEXT_COLOR.test(node.color.color)) refuse("Text colours must be #rrggbb hex for Rhema scene output")
+        else if (node.color.type !== "solid" && node.color.type !== "gradient") refuse("This text paint cannot be drawn on Rhema outputs")
+        const textEdge = shapeOutline({ ...node, radiusX: 0, radiusY: 0 }, false)
+        if ("issue" in textEdge) refuse(textEdge.issue)
+        if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) refuse("Text clipping cannot be used in Rhema scene output yet")
         if (node.text.length > 2000) refuse("Static text is limited to 2,000 characters in Rhema scene output")
         if (typeof binding.textSecond === "string" && binding.textSecond.length > 2000) refuse("Second-language text is limited to 2,000 characters in Rhema scene output")
         if (!TEXT_WEIGHTS.has(node.fontWeight)) refuse("This text weight is not supported by Rhema scene output yet")
@@ -362,7 +367,11 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         if (node.scaleX <= 0 || node.scaleY <= 0 || Math.abs(node.scaleX - node.scaleY) > 0.0001) {
           refuse("Text must keep an even, unflipped scale for Rhema scene output")
         }
-        if (compatible && node.color.type === "solid") {
+        if (compatible) {
+          delete layer.textGradient
+          delete layer.textOutline
+          if (textGradient) layer.textGradient = textGradient
+          if (!("issue" in textEdge) && textEdge.outline) layer.textOutline = textEdge.outline
           layer.text = node.text
           layer.fontFamily = node.fontFamily.trim()
           layer.fontSize = effectiveFontSize
@@ -370,7 +379,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
           layer.fontStyle = node.fontStyle
           layer.textAlign = node.textAlign
           layer.lineHeight = node.lineHeight
-          layer.textColor = node.color.color
+          // Older builds show this colour; this build and every output draw the gradient over it.
+          layer.textColor = textGradient ? gradientFallback(textGradient) : node.color.type === "solid" ? node.color.color : "#ffffff"
           layer.underline = node.underline
           // Saved by the editor: outputs widen an over-wide word as the editor does (from its origin).
           layer.textWiden = node.originX === "center" ? "both" : node.originX === "right" ? "left" : "right"

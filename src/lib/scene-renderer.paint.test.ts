@@ -165,6 +165,37 @@ describe("scene paint on a real canvas", () => {
     expect(stored.layers.map((l) => [l.id, l.shadow ?? null, l.blur ?? null])).toEqual([["card", shadowed.layers[0]!.shadow, null], ["soft", null, 30], ["bad", null, null]])
   })
 
+  it("paints words with a gradient and an outline as the Avnac editor does (#448)", async () => {
+    const words: Scene = { ...painted, id: "words2", backgroundGradient: undefined, background: "#0b1a3a", layers: [
+      layer("t", "text", { text: "GLORY", fontFamily: "Arial", fontSize: 200, fontWeight: "900", textColor: "#d14c62", textGradient: g(90, ["#d14c62", 0], ["#3157a4", 1]), textOutline: { color: "#ffffff", width: 6 }, box: { x: 20, y: 30, w: 60, h: 22 } }),
+    ] }
+    const design = sceneToDesign(words)
+    expect(design.scene.nodes.t).toMatchObject({ color: { type: "gradient" }, stroke: { type: "solid", color: "#ffffff" }, strokeWidth: 6 })
+    const back = designToScene(design)
+    expect(back.issues).toEqual([])
+    expect(back.scene.layers[0]).toMatchObject({ textGradient: words.layers[0]!.textGradient, textOutline: { color: "#ffffff", width: 6 }, textColor: "#d14c62" })
+    const out = drawOutput(back.scene, 1920, 1080)
+    // Both ends of the gradient and the white outline are on screen.
+    let rose = 0, blue = 0, white = 0
+    for (let x = 384; x < 1536; x += 3) for (let y = 324; y < 560; y += 3) {
+      const p = pixel(out, x, y)
+      if (near(p, ROSE, 40)) rose++
+      if (near(p, BLUE, 40)) blue++
+      if (near(p, WHITE, 10)) white++
+    }
+    expect([rose > 50, blue > 50, white > 50]).toEqual([true, true, true])
+    // A joined desk's save keeps them (it neither sees nor sets them), unless it changed the words' colour.
+    const { mergeDeskScene, sceneForDesk } = await import("@/lib/desk-scenes")
+    const sent = JSON.parse(JSON.stringify(sceneForDesk(back.scene, false)))
+    const moved = mergeDeskScene({ ...sent, layers: sent.layers.map((l: SceneLayer) => ({ ...l, box: { ...l.box, x: 25 } })) }, back.scene, { cameras: new Set(), themes: new Set() })!
+    expect(moved.layers[0]).toMatchObject({ box: { x: 25 }, textGradient: back.scene.layers[0]!.textGradient, textOutline: { color: "#ffffff", width: 6 } })
+    const recoloured = mergeDeskScene({ ...sent, layers: sent.layers.map((l: SceneLayer) => ({ ...l, textColor: "#00ff00" })) }, back.scene, { cameras: new Set(), themes: new Set() })!
+    expect(recoloured.layers[0]!.textGradient).toBeUndefined()
+    // A stored scene drops a text gradient or outline it cannot draw.
+    const stored = normalizeScene({ ...words, layers: [layer("bad", "text", { text: "x", textGradient: { angle: 0, stops: [] } as never, textOutline: { color: "red", width: 3 } as never })] })!
+    expect([stored.layers[0]!.textGradient, stored.layers[0]!.textOutline]).toEqual([undefined, undefined])
+  })
+
   it("puts each gradient's colours where the angle says, at 1920×1080 and 1280×720", () => {
     for (const [w, h] of [[1920, 1080], [1280, 720]] as const) {
       const c = drawOutput(painted, w, h)

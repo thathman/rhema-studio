@@ -215,6 +215,7 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
   // editor (which does not clip text) shows them.
   const k = frameHeight / 1080
   const room = (layer.shadow ? Math.max(Math.abs(layer.shadow.x), Math.abs(layer.shadow.y)) + layer.shadow.blur : 0) * k + (layer.blur ? layer.blur * 0.4 * 3 : 0) * k
+    + (layer.textOutline ? layer.textOutline.width / 2 + 1 : 0) * k
   if (!widens) {
     ctx.beginPath()
     ctx.rect(r.x - room, r.y - room, r.w + 2 * room, r.h + 2 * room)
@@ -226,13 +227,23 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
     ctx.rect(x0 - room, r.y - room, w + 2 * room, r.h + 2 * room)
     ctx.clip()
   }
-  ctx.fillStyle = color
+  // As the editor paints words (#448): a gradient over the text box, an outline behind each line.
+  // The gradient spans the words as laid out (the editor's layout box): their width, and their
+  // lines' height with the last one em tall.
+  const paint = layer.textGradient ? scenePaint(ctx, color, layer.textGradient, { x: x0, y: r.y, w, h: Math.max(fontSize, (lines.length - 1) * step + fontSize) }) : color
+  ctx.fillStyle = paint
   ctx.textAlign = align
   ctx.textBaseline = "top"
+  const outline = layer.textOutline
   let y = r.y
   for (const line of lines) {
     if (line) {
       const x = align === "center" ? x0 + w / 2 : align === "right" ? x0 + w : x0
+      if (outline) {
+        ctx.strokeStyle = outline.color
+        ctx.lineWidth = (outline.width * frameHeight) / 1080
+        ctx.strokeText(line, x, y, w)
+      }
       ctx.fillText(line, x, y, w)
       if (layer.underline) {
         const width = Math.min(w, ctx.measureText(line).width)
@@ -241,7 +252,7 @@ function paintStaticText(ctx: CanvasRenderingContext2D, layer: SceneLayerFrame, 
         ctx.beginPath()
         ctx.moveTo(left, underlineY)
         ctx.lineTo(left + width, underlineY)
-        ctx.strokeStyle = color
+        ctx.strokeStyle = paint
         ctx.lineWidth = Math.max(1, fontSize / 24)
         ctx.stroke()
       }

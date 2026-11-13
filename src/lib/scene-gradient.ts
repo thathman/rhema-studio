@@ -93,7 +93,11 @@ export function keepHostGradients(next: Scene, host: Scene | undefined): Scene {
     ...(host.backgroundGradient && next.background === host.background ? { backgroundGradient: host.backgroundGradient } : {}),
     layers: next.layers.map((l) => {
       const old = had.get(l.id)
-      return old?.gradient && old.kind === l.kind && old.color === l.color ? { ...l, gradient: old.gradient } : l
+      if (!old || old.kind !== l.kind) return l
+      let out = old.gradient && old.color === l.color ? { ...l, gradient: old.gradient } : l
+      // Words' gradient (#448) the same way: kept while the desk left the text colour as it was.
+      if (old.textGradient && old.textColor === l.textColor) out = { ...out, textGradient: old.textGradient }
+      return out
     }),
   }
 }
