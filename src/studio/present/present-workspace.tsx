@@ -430,7 +430,6 @@ function LiveConsoleSurface({
           </div>
           <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{orderLabel}</span>
         </div>
-        <LiveActivityStrip />
         {hasTimedItems && (
           <div className="flex justify-end border-b border-border px-4 py-1.5">
             <TimedMoves />
@@ -479,6 +478,8 @@ function LiveConsoleSurface({
             <RundownList mode="present" />
           </div>
         )}
+        {/* Crew, requests and notices at the foot of the running order (UX audit slice 3), out of the way of what is next. */}
+        <LiveActivityStrip />
       </section>
       {/* Wide windows use the workspace grid; 1024–1200 keeps two readable panes, while smaller widths stack. */}
       <div className="contents max-[1200px]:row-span-3 max-[1200px]:grid max-[1200px]:grid-cols-1 min-[1024px]:max-[1200px]:grid-cols-2 max-[1200px]:min-h-0 max-[1200px]:gap-2 max-[1200px]:overflow-y-auto">
