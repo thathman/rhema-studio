@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "@/components/error-boundary"
 import { AboutNotices } from "@/components/about-notices"
 import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, defaultLimits, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
 import { autoModeOf, useBroadcastStore, type AutoMode } from "@/stores/broadcast-store"
@@ -1295,7 +1296,8 @@ export function SettingsPage() {
         <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
           <h2 className="shrink-0 px-[30px] pt-[26px] pb-2 text-[1.5625rem] font-bold tracking-[-0.035em]">{sectionTitles[activeSection]}</h2>
           <div ref={content} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[30px] pt-2 pb-[30px] [&_[data-search-hit]]:rounded-sm [&_[data-search-hit]]:bg-accent [&_[data-search-hit]]:text-accent-foreground [&_[data-search-hit]]:shadow-[0_0_0_3px_var(--accent)]">
-            <ActiveContent />
+            {/* One section failing leaves the rest of Settings usable (UX audit slice 5); keyed so another section starts clean. */}
+            <ErrorBoundary key={activeSection} name={`Settings → ${sectionTitles[activeSection]}`}><ActiveContent /></ErrorBoundary>
           </div>
         </section>
       </div>
