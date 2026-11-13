@@ -122,6 +122,6 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 
 | Area | Status |
 | --- | --- |
-| Rhema Comms (full-duplex held PTT, notices) | DEFERRED |
+| Rhema Comms (full-duplex held PTT, notices) | MERGED (phases C1–C4: notices, action requests with Seen/Ready/Unable, host-hub voice with channels, private calls and priority ducking; `src/lib/voice.ts`, `/api/v1/voice`). Not yet run with three or more real speakers. |
 | Rhema Engage (congregation quiz) | DEFERRED |
-| MCP service-draft and design tools | DEFERRED (MCP design-draft save landed in #664; keep the rest) |
+| MCP service-draft and design tools | MERGED in part: 16 service tools with revision checks, resources and prompts; design capabilities, list, validate and create-draft (#664). Not yet: reading or revising a design draft, accepting a service draft per event. |
