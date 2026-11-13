@@ -36,7 +36,7 @@ Use a **long random `ADMIN_KEY`**, a separate random `SESSION_SIGNING_KEY` of at
 
 The quiz can live under a path on a domain whose DNS is on Cloudflare, instead of `*.workers.dev`:
 
-1. In `wrangler.toml`, uncomment the `routes` line and the `[vars] BASE_PATH` block, with your domain and path (for example `example.com/quiz*` and `/quiz`).
+1. In `wrangler.toml`, uncomment the `routes` line and the `[vars] BASE_PATH` block, with your domain and path (for example `example.com/quiz*` and `/quiz`). Add `workers_dev = false` too if the old `*.workers.dev` address should stop answering (otherwise it keeps serving, but only under `/quiz`).
 2. Add your domain to the Turnstile widget's hostnames (Cloudflare dashboard → Turnstile).
 3. `npx wrangler deploy`.
 4. In Rhema Studio → Live → Engage Quiz, use `https://example.com/quiz` as the quiz address.
