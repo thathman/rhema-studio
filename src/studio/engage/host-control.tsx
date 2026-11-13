@@ -7,6 +7,8 @@ import { useQueueStore } from "@/stores/queue-store";
 import { engageFromItem } from "@/lib/engage";
 import { qrDataUrl } from "@/lib/qr-bulletin";
 import { useEngageHost } from "@/studio/engage/host-store";
+import { showEngageOnScreens, stopFollowingEngage, useEngageScreens } from "@/studio/engage/engage-screens";
+import { presentActions } from "@/studio/present-actions";
 
 type PublicState = {
   title: string; code: string; phase: string; deadline: number | null; remainingMs: number | null;
@@ -53,6 +55,17 @@ export function EngageHostControl() {
   const selected = quizzes.find(q => q.id === selectedId) ?? quizzes[0];
   const quiz = engageFromItem(selected);
   const disabled = pending || !session;
+  const following = useEngageScreens(s => s.following);
+  const showOnScreens = () => {
+    if (!session) return;
+    showEngageOnScreens(session, async () => {
+      const start = Date.now();
+      const next = await call(session.endpoint, "/api/rooms/" + session.code + "/state", "GET", session.hostToken) as PublicState;
+      return { state: next, offsetMs: next.serverNow - (start + Math.floor((Date.now() - start) / 2)) };
+    });
+  };
+  // Nothing was on before the quiz: taking it off clears Live.
+  const takeOffScreens = () => { stopFollowingEngage(); if (presentActions.canGoBack()) presentActions.back(); else presentActions.clear(); };
 
   useEffect(() => {
     if (!open || !session) return;
@@ -119,6 +132,7 @@ export function EngageHostControl() {
     setPending(true); setError(null);
     try {
       await call(session.endpoint, "/api/rooms/" + session.code, "DELETE", session.hostToken);
+      if (useEngageScreens.getState().following) takeOffScreens();
       useEngageHost.getState().setSession(null);
       setState(null);
       setOpen(false);
@@ -187,11 +201,14 @@ export function EngageHostControl() {
                 {state?.phase === "question" && <Button size="sm" disabled={disabled} onClick={() => void command("reveal")}>Reveal answer</Button>}
                 {state?.phase === "reveal" && <Button size="sm" disabled={disabled} onClick={() => void command("next")}>Next / Finish</Button>}
                 {!["finished", "expired"].includes(state?.phase ?? "") && <Button size="sm" variant="outline" disabled={disabled} onClick={() => void command("finish")}>Finish game</Button>}
+                {following
+                  ? <Button size="sm" variant="outline" onClick={takeOffScreens}>Take off Rhema's screens</Button>
+                  : <Button size="sm" variant="outline" onClick={showOnScreens}>Show on Rhema's screens</Button>}
                 <Button size="sm" variant="outline" onClick={() => window.open(session.screenUrl, "_blank", "noopener,noreferrer")}>Open TV / OBS browser display</Button>
                 <Button size="sm" variant="outline" disabled={pending} onClick={() => void deleteData()}>Delete quiz data now</Button>
-                <Button size="sm" variant="ghost" onClick={() => { if (window.confirm("Forget host access on this computer? The online quiz and participant data remain stored for up to eight hours.")) useEngageHost.getState().setSession(null); }}>Forget access</Button>
+                <Button size="sm" variant="ghost" onClick={() => { if (window.confirm("Forget host access on this computer? The online quiz and participant data remain stored for up to eight hours.")) { stopFollowingEngage(); useEngageHost.getState().setSession(null); } }}>Forget access</Button>
               </div>
-              <p className="text-xs text-muted-foreground">To put the quiz on the TV, open the screen URL on a designated display or add it as an OBS Browser Source. This V1 does not yet auto-Take a Rhema congregation scene.</p>
+              <p className="text-xs text-muted-foreground">Show on Rhema's screens puts the quiz on Live as a quick screen and keeps it in step with the game (join code, each question, the answer at reveal, the scores); Back or Take off returns what was on. It stops following as soon as anything else goes on Live. The TV / OBS browser display is still there for a screen Rhema does not drive.</p>
               {!!state?.leaderboard?.length && <div className="rounded-lg border border-border p-3"><p className="font-semibold">Leaderboard</p>
                 {state.leaderboard.slice(0, 10).map(p => <p key={p.rank} className="text-xs">{p.rank}. {p.nickname} — {p.points} pts · {Math.round(p.correctMs / 100) / 10}s correct-response time</p>)}
               </div>}
