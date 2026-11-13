@@ -28,7 +28,7 @@ async function stageFromDesk(line: string): Promise<string | null> {
  * is for this desk (and what it sent), write one, and answer Seen / Ready / Unable. Private: nothing
  * here reaches a screen.
  */
-export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, onQueue, eventTitle, scenes = [], rundown = [], people = [], cameras = [], findSongs = librarySongs, allowProductionActions = true, allowCommunications = true }: {
+export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, onQueue, eventTitle, events = [], scenes = [], rundown = [], people = [], cameras = [], findSongs = librarySongs, allowProductionActions = true, allowCommunications = true }: {
   notices: Notice[]
   /** "host" on the main desk, else the joined desk's role. */
   role: string
@@ -46,7 +46,9 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
    * Queue a verse or a song asked for: add it to the run of show for later, showing nothing (Comms
    * C2). Null when added, else why not. Without it, no Queue button.
    */
-  onQueue?: (action: NoticeAction) => Promise<string | null> | string | null
+  onQueue?: (action: NoticeAction, event: string | null) => Promise<string | null> | string | null
+  /** The plan's events a queued verse or song can go into (#409); none: where the main desk adds an item. */
+  events?: { id: string; title: string }[]
   /** Paired desks and people a notice can go to by name (besides the groups). */
   people?: string[]
   /** For writing and naming action requests. */
@@ -68,6 +70,8 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
   const [to, setTo] = useState<string>(role === "host" ? "all" : "host")
   const [failed, setFailed] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
+  // Which event each request is queued into (#409), chosen on this desk.
+  const [into, setInto] = useState<Record<string, string>>({})
   const others = people.filter((p) => p && p !== me)
   const [urgent, setUrgent] = useState(false)
   const [kind, setKind] = useState<"" | NoticeAction["kind"]>("")
@@ -106,7 +110,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
     setBusy(n.id)
     const a = n.action!
     // A wrap-up warning on a joined desk goes to the host's stage display as this desk's stage message.
-    const run = () => (mode === "queue" ? onQueue!(a) : a.kind === "wrap" && role !== "host" ? stageFromDesk(a.value) : onAction(a, mode))
+    const run = () => (mode === "queue" ? onQueue!(a, into[n.id] || null) : a.kind === "wrap" && role !== "host" ? stageFromDesk(a.value) : onAction(a, mode))
     const why = await Promise.resolve().then(run).catch((e: unknown) => String(e))
     setBusy(null)
     const what = mode === "preview" ? `“Preview ${a.value}”` : mode === "queue" ? `“Queue ${a.value}”` : `“${actionName(a)}”`
@@ -226,6 +230,13 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, on
                   {allowProductionActions && n.action && canPreview(n.action) && <Button size="xs" variant="outline" disabled={!allowCommunications || busy === n.id} aria-label={`Preview ${n.action.value}`} title="Put it in the main computer's Preview only: nothing goes live" onClick={() => void act(n, "preview")}>Preview</Button>}
                   {/* Queue: into the run of show for later; nothing is shown. */}
                   {allowProductionActions && n.action && onQueue && canQueue(n.action) && <Button size="xs" variant="outline" disabled={!allowCommunications || busy === n.id} aria-label={`Queue ${n.action.value}`} title="Add it to the run of show for later: nothing is shown" onClick={() => void act(n, "queue")}>Queue</Button>}
+                  {/* Into which event of the plan (#409); unchosen: where the main desk adds an item. */}
+                  {allowProductionActions && n.action && onQueue && canQueue(n.action) && events.length > 0 && (
+                    <select aria-label={`Queue ${n.action.value} into`} value={into[n.id] ?? ""} disabled={!allowCommunications || busy === n.id} onChange={(e) => setInto((m) => ({ ...m, [n.id]: e.target.value }))} className="h-6 max-w-40 rounded-md border border-input bg-transparent px-1 text-xs">
+                      <option value="">into: where the main desk adds</option>
+                      {events.map((ev) => <option key={ev.id} value={ev.id}>into: {ev.title}</option>)}
+                    </select>
+                  )}
                   {/* A scene change is accepted with its own button (above) or declined: no bare Ready. */}
                   {answerStates.map((s) => (
                     <Button key={s} size="xs" disabled={!allowCommunications || busy === n.id} variant={answered?.state === s ? "default" : "outline"} onClick={() => void answer(n, s)}>{n.action?.kind === "sceneEdit" && allowProductionActions ? "Decline" : ANSWER_NAMES[s]}</Button>

@@ -43,6 +43,8 @@ export function HostNotices({ compact = false }: { compact?: boolean }) {
   const me = operator ? `${operator} (main computer)` : "Main computer"
   const scenes = useBroadcastStore((s) => s.scenes)
   const rundown = useQueueStore((s) => s.items)
+  // The plan's events a request can be queued into (#409).
+  const events = headers.filter((h) => h.event).map((h) => ({ id: h.id, title: h.name }))
   const devices = useSettingsStore((s) => s.remoteDevices)
   const cameras = useSettingsStore((s) => s.cameras)
   const people = devices.map((d) => d.name)
@@ -124,6 +126,7 @@ export function HostNotices({ compact = false }: { compact?: boolean }) {
           }}
           onAction={runNoticeAction}
           onQueue={queueRequest}
+          events={events}
           scenes={scenes}
           rundown={rundown}
           people={people}

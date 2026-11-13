@@ -87,12 +87,22 @@ describe("Queue on a request", () => {
     const withQueue = await panel({ notices: [notice({ kind: "song", value: "Amazing Grace" }, "host")], role: "host", onQueue })
     expect(buttonNamed(withQueue.el, "Queue")).toBeDefined()
     await act(async () => buttonNamed(withQueue.el, "Queue")!.click())
-    expect(onQueue).toHaveBeenCalledWith({ kind: "song", value: "Amazing Grace" })
+    expect(onQueue).toHaveBeenCalledWith({ kind: "song", value: "Amazing Grace" }, null)
     expect(withQueue.onAnswer).toHaveBeenCalledWith("n1", "ready")
     const scene = await panel({ notices: [notice({ kind: "scene", value: "s1" }, "host")], role: "host", onQueue })
     expect(buttonNamed(scene.el, "Queue")).toBeUndefined()
     const joined = await panel({ notices: [notice({ kind: "song", value: "Amazing Grace" }, "worship")], role: "worship" })
     expect(buttonNamed(joined.el, "Queue")).toBeUndefined()
+  })
+
+  it("queues into the event chosen beside Queue (#409)", async () => {
+    const onQueue = vi.fn(async () => null)
+    const { el } = await panel({ notices: [notice({ kind: "song", value: "Amazing Grace" }, "host")], role: "host", onQueue, events: [{ id: "e1", title: "Opening prayer" }, { id: "e2", title: "Sermon" }] })
+    const into = el.querySelector('select[aria-label="Queue Amazing Grace into"]') as HTMLSelectElement
+    expect([...into.options].map((o) => o.textContent)).toEqual(["into: where the main desk adds", "into: Opening prayer", "into: Sermon"])
+    await act(async () => { into.value = "e2"; into.dispatchEvent(new Event("change", { bubbles: true })) })
+    await act(async () => buttonNamed(el, "Queue")!.click())
+    expect(onQueue).toHaveBeenCalledWith({ kind: "song", value: "Amazing Grace" }, "e2")
   })
 
   it("a song not in the library answers Unable with why", async () => {

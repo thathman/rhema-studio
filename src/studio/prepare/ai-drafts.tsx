@@ -68,6 +68,23 @@ export function AiDrafts() {
     const suggestions = items.filter((i) => i.ai_suggestion).length
     toast.success(`${d.title} is now the rundown in Prepare`, { description: `Unsaved: check every item, source anything marked Missing${suggestions ? `, accept the ${suggestions} ${suggestions === 1 ? "slide" : "slides"} marked AI suggestion` : ""}, then use New service to save it.` })
   }
+  // Added after the open service's own items, as its own phases (#252): nothing already planned changes.
+  const addDraft = (d: AiDraft) => {
+    const { items, headers } = draftToRundown(leaveOut(d, outOf(d)), undefined, names)
+    // Its phases join as plain sections: the service keeps its own main phase, start time and loops.
+    const plain = headers.map((h) => {
+      if (h.type !== "phase") return h
+      const c = { ...h, rule: "manual" as const }
+      delete c.role
+      delete c.starts_at
+      return c
+    })
+    useQueueStore.getState().appendRundown(items, plain)
+    setPicking(null)
+    setOpen(false)
+    void invoke("ai_draft_mark_opened", { id: d.id, by: useSettingsStore.getState().operatorName || null }).catch(() => {}).then(load)
+    toast.success(`${items.length} ${items.length === 1 ? "item" : "items"} from ${d.title} added after this service's own, before any closing loop`, { description: "Unsaved: check them, source anything marked Missing, then save. Undo takes them out again." })
+  }
   const remove = async (d: AiDraft) => {
     setConfirmRemove(null)
     try {
@@ -142,6 +159,7 @@ export function AiDrafts() {
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       <Button size="sm" disabled={items.length === 0} onClick={() => openDraft(d)} title="Put this draft in the rundown here, as an unsaved service">{items.length < all ? `Open ${items.length} of ${all} items in the rundown` : isOpened(d) ? "Open again in the rundown" : "Open in the rundown"}</Button>
+                      {count > 0 && <Button size="sm" variant="outline" disabled={items.length === 0} onClick={() => addDraft(d)} title="Add these items after the service you have open, as new phases; nothing already in it changes">Add to this service</Button>}
                       <Button size="sm" variant="outline" aria-expanded={choosing} onClick={() => setPicking(choosing ? null : { id: d.id, out: new Set() })}>{choosing ? "Keep every item" : "Choose items"}</Button>
                       {confirmRemove === d.id ? (
                         <span role="alert" className="flex flex-wrap items-center gap-2">
