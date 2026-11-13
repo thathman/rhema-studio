@@ -1,3 +1,4 @@
+import { tablistKeys } from "@/lib/tablist-keys"
 import { LibraryPreviewPane } from "@/studio/library/library-preview-pane"
 import { useLibraryPreview } from "@/stores/library-preview-store"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
@@ -435,7 +436,7 @@ export function LibraryWorkspace() {
         </div>
       )}
 
-      <div role="tablist" aria-label="Library" className="flex shrink-0 flex-wrap gap-2 px-[29px] pb-4 max-[1200px]:px-5">
+      <div onKeyDown={tablistKeys} role="tablist" aria-label="Library" className="flex shrink-0 flex-wrap gap-2 px-[29px] pb-4 max-[1200px]:px-5">
         {SECTIONS.map(([id, label]) => (
           <button
             key={id}

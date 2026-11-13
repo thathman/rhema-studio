@@ -1,3 +1,4 @@
+import { tablistKeys } from "@/lib/tablist-keys"
 import { useEffect, useState } from "react"
 import { ChevronsUpDownIcon, CheckIcon } from "lucide-react"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -484,7 +485,7 @@ export function VerseProperties() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-3 gap-1 rounded-md bg-muted p-1" role="tablist" aria-label="Which language to style">
+      <div className="grid grid-cols-3 gap-1 rounded-md bg-muted p-1" onKeyDown={tablistKeys} role="tablist" aria-label="Which language to style">
         {([
           ["both", "Both"],
           ["primary", names.first ? `First · ${names.first}` : "First"],
