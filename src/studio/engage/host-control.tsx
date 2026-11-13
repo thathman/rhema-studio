@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQueueStore } from "@/stores/queue-store";
-import { engageFromItem } from "@/lib/engage";
+import { endpointOf, engageFromItem } from "@/lib/engage";
 import { qrDataUrl } from "@/lib/qr-bulletin";
 import { useEngageHost } from "@/studio/engage/host-store";
 import { engageSlideUp, showEngageOnScreens, showEngageScores, stopFollowingEngage, useEngageScreens } from "@/studio/engage/engage-screens";
@@ -29,14 +29,6 @@ async function call(endpoint: string, path: string, method = "GET", token?: stri
   return result;
 }
 
-function endpointOf(input: string): string | null {
-  try {
-    const url = new URL(input.trim());
-    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return null;
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) return null;
-    return url.origin;
-  } catch { return null; }
-}
 
 export function EngageHostControl() {
   const items = useQueueStore(s => s.items);
@@ -110,7 +102,7 @@ export function EngageHostControl() {
 
   const launch = async () => {
     const origin = endpointOf(endpoint);
-    if (!origin) { setError("Enter the HTTPS origin of your deployed Rhema Engage service (localhost permitted for development)."); return; }
+    if (!origin) { setError("Enter the quiz service's https address: its workers.dev address, or your own domain with its path, e.g. https://example.com/quiz (localhost is allowed for development)."); return; }
     if (!key.trim()) { setError("Enter the host's private service key. It is never saved with the service."); return; }
     if (!selected || !quiz || !quiz.reviewed) { setError("Select a reviewed quiz from the current service."); return; }
     setPending(true); setError(null);
@@ -172,7 +164,7 @@ export function EngageHostControl() {
               </label>
               <p className="text-xs text-muted-foreground">{quiz ? `${quiz.questions.length} questions · ${quiz.lobbySeconds}s lobby · ${quiz.questionSeconds}s per question` : "Create an approved Quiz event in Prepare first."}</p>
               <label className="flex flex-col gap-1">Public quiz service HTTPS address
-                <Input type="url" autoComplete="url" placeholder="https://engage.example" value={endpoint} onChange={e => setEndpoint(e.target.value)} />
+                <Input type="url" autoComplete="url" placeholder="https://example.com/quiz" value={endpoint} onChange={e => setEndpoint(e.target.value)} />
               </label>
               <label className="flex flex-col gap-1">Host creation key
                 <Input type="password" autoComplete="off" placeholder="Private secret configured on cloud worker" value={key} onChange={e => setKey(e.target.value)} />

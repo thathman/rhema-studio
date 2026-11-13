@@ -56,3 +56,20 @@ export function estimatedEngageMinutes(q: EngageQuiz): number {
   // Allow ten seconds per answer explanation, not just the question clock.
   return Math.max(1, Math.ceil((q.lobbySeconds + q.questions.length * (q.questionSeconds + 10)) / 60));
 }
+
+/**
+ * The quiz service's address: its origin, or its origin and a path when it runs under one (a church's
+ * own domain, e.g. https://example.com/quiz). The path is kept without a trailing slash, so the
+ * service's own paths ("/api/rooms/…") follow it.
+ */
+export function endpointOf(input: string): string | null {
+  try {
+    const url = new URL(input.trim());
+    if (url.username || url.password || url.search || url.hash) return null;
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) return null;
+    const path = url.pathname.replace(/\/+$/, "");
+    if (path && !/^\/[A-Za-z0-9_\-/]{1,100}$/.test(path)) return null;
+    if (path.includes("//")) return null;
+    return url.origin + path;
+  } catch { return null; }
+}
