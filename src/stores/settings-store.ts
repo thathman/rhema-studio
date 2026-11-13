@@ -200,7 +200,7 @@ import { defaultSetup, normalizeSetup, type SetupProfile } from "@/lib/setup-rea
 import { isCountdownTo } from "@/lib/countdown"
 import { newFeedToken } from "@/lib/output-on-air"
 import type { CountdownTo } from "@/types"
-import { churchLanguageTags, setChurchLanguageOrder } from "@/lib/church-languages"
+import { setChurchFirstLanguage } from "@/lib/church-languages"
 
 type SttProvider = "deepgram" | "whisper" | "openai"
 type SpeechLanguage = "en" | "yo"
@@ -1159,9 +1159,8 @@ async function persistAll(state: SettingsState): Promise<void> {
   }
 }
 
-// New song items follow the church's languages in its order (#446).
-setChurchLanguageOrder(churchLanguageTags(useSettingsStore.getState().setup.serviceLanguages))
+// New song items show the church's first language first, as hymns do (#446).
+setChurchFirstLanguage(useSettingsStore.getState().hymnFirstLanguage)
 useSettingsStore.subscribe((s, prev) => {
-  if (s.setup.serviceLanguages !== prev.setup.serviceLanguages) setChurchLanguageOrder(churchLanguageTags(s.setup.serviceLanguages))
+  if (s.hymnFirstLanguage !== prev.hymnFirstLanguage) setChurchFirstLanguage(s.hymnFirstLanguage)
 })
-

@@ -251,7 +251,7 @@ export function sectionShort(kind: SectionKind, label: string): string {
 
 /** A song (from search) as a rundown item: default arrangement, primary language first, then the others it has. */
 export function songQueueItem(song: SongSummary, id: string = crypto.randomUUID()): SongQueueItem {
-  // The church's languages first, in its order (#446), then the song's own primary.
+  // The church's first language first, as hymns show it (#446), then the song's own primary.
   const languages = inChurchOrder(song.primary_language, song.languages)
   return {
     id,
