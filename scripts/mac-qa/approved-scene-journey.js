@@ -403,6 +403,8 @@ async function runScenario() {
 
     stage = "save a newer Design version while the service still pins version 1"
     await clickButton("Design")
+    // Design reopens its last section (Scenes earlier in this journey): go to My Designs.
+    await clickWithin('nav[aria-label="Design sections"]', "My Designs")
     const designRow = await waitFor(
       () => [...document.querySelectorAll('aside[aria-label="My designs"] button')]
         .find((button) => normal(button.textContent).startsWith("QA Approved Design")),

@@ -113,6 +113,12 @@ async function runScenario() {
     stage = "edit the scene draft"
     await clickButton("Design")
     await clickButton("Scenes")
+    // Design → Scenes opens fresh: choose the saved scene by name in its list.
+    const savedButton = await waitFor(
+      () => [...document.querySelectorAll('section[aria-label="Scenes"] li button')].find((button) => normal(button.querySelector("span")?.textContent) === "Full screen"),
+      "Full screen in Design → Scenes",
+    )
+    savedButton.click()
     await waitFor(() => document.querySelector('input[aria-label="Scene name"]')?.value === "Full screen", "the saved scene in Design → Scenes")
     await setInput('input[aria-label="Scene name"]', "QA Scene Draft")
     await setInput('input[aria-label="Background colour"]', "#123456")
