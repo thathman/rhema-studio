@@ -312,7 +312,7 @@ describe("Add item workflow (#386)", () => {
     useAddDialog.setState({ open: false })
 
     await act(async () => root!.render(<><AddItems /><ItemEditor /></>))
-    expect(document.body.textContent).toContain("Event editor · 1")
+    expect(document.body.textContent).toContain("Item 1")
     expect(document.body.textContent).toContain("John 3:16")
 
     await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Add item"))!.click())
@@ -331,7 +331,7 @@ describe("Add item workflow (#386)", () => {
     // Live Preview keeps the reading it had (#447).
     expect(useBibleStore.getState().selectedQueueItemId).toBe(opening.id)
     expect(useBibleStore.getState().selectedVerse).toBe(verse)
-    expect(document.body.textContent).toContain("Event editor · 2")
+    expect(document.body.textContent).toContain("Item 2")
     expect([...document.querySelectorAll("h2")].some((heading) => heading.textContent === inserted.reference)).toBe(true)
   })
 
