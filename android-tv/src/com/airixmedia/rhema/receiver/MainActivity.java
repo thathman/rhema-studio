@@ -319,6 +319,7 @@ public class MainActivity extends Activity {
         measureDisplay();
         if (BootStart.turnOnAfterPairing(bootChosen(), startsWithTv(), shown() != null)) setStartWithTv(true);
         askOverlayOnce();
+        askRemoveOldOnce();
         server = new ShowServer(PORT, this);
         server.start();
         advertise();
@@ -1083,6 +1084,7 @@ public class MainActivity extends Activity {
         }
         double own = pageOverscan;
         t.append("\nEdge inset   ").append(own > 0 ? "set in Rhema Studio (" + trim(own) + "%)" : tvInset() + "%   (↑ ↓, for a TV that cuts off the edges)");
+        if (oldInstalled()) t.append("\nThe older Rhema Studio Receiver is still installed: remove it (Settings → Apps) so only one opens at a start");
         t.append("\nRhema Studio Receiver ").append(versionName()).append("   ·   Airix Media — Hendrix Nwaokolo");
         t.setSpan(new RelativeSizeSpan(0.72f), small, t.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         t.setSpan(new ForegroundColorSpan(Color.rgb(190, 190, 190)), small, t.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -1091,10 +1093,52 @@ public class MainActivity extends Activity {
 
     private String versionName() {
         try {
-            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            String v = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            return v == null ? "" : v;
         } catch (PackageManager.NameNotFoundException ignored) {
             return "";
         }
+    }
+
+    /** The Receiver before the Airix Media package (1.9): still on this TV, it would compete for port 8095 at a start. */
+    static final String OLD_PACKAGE = "com.openbezal.rhema.receiver";
+
+    private boolean oldInstalled() {
+        try {
+            getPackageManager().getPackageInfo(OLD_PACKAGE, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException gone) {
+            return false;
+        }
+    }
+
+    /** Android's own "uninstall this app?" for the older Receiver; the person confirms it there. */
+    private void removeOld() {
+        try {
+            startActivity(new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + OLD_PACKAGE)));
+        } catch (ActivityNotFoundException | SecurityException noUninstaller) {
+            // The code screen still says how: Settings → Apps.
+        }
+    }
+
+    /**
+     * Once per start while the older Receiver is still installed (1.9): both would open at a TV start and
+     * both listen on port 8095, so whichever started first would get the feeds. Offers Android's uninstall.
+     */
+    private void askRemoveOldOnce() {
+        if (!oldInstalled()) return;
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Remove the older Rhema Studio Receiver")
+                .setMessage("This TV still has the Receiver from before its new name. Pair this one, then remove the older one, "
+                        + "so only one opens when the TV starts.")
+                .setPositiveButton("Remove the older one", new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int which) {
+                        removeOld();
+                    }
+                })
+                .setNegativeButton("Later", null)
+                .show();
     }
 
     private static String trim(double v) {

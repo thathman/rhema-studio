@@ -1018,6 +1018,15 @@ public final class SettingsActivity extends Activity {
         note(adv, "While sending, Rhema Studio Cam is a foreground service (its notification says so) with a partial wake lock and a high-performance Wi-Fi lock. Android " + Build.VERSION.RELEASE + ". From Android 9 only a foreground service may use the camera with the screen off; Android 14 asks for the camera and microphone service types, which this app declares. Some makers (Xiaomi, Huawei, Samsung's \"sleeping apps\") still stop apps unless allowed above. When the phone gets hot (Android 10+), sending steps down: bitrate 30 % lower, then 1080p and 30 frames a second, then 720p.");
     }
 
+    private boolean oldCamInstalled() {
+        try {
+            getPackageManager().getPackageInfo("com.openbezal.rhema.camera", 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException gone) {
+            return false;
+        }
+    }
+
     private void about() {
         LinearLayout c = card("About");
         String version = "1.0.0.0";
@@ -1028,6 +1037,20 @@ public final class SettingsActivity extends Activity {
         }
         info(c, "Rhema Studio Cam", version);
         info(c, "Developer", "Airix Media — Hendrix Nwaokolo");
+        // The Cam before the Airix Media package (1.7): both would answer the pairing link.
+        if (oldCamInstalled()) {
+            note(c, "The older Rhema Studio Cam is still on this phone. Both answer the camera link, so remove the older one once this one is paired.");
+            button(c, "Remove the older Cam", false, new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    try {
+                        startActivity(new android.content.Intent(android.content.Intent.ACTION_DELETE, android.net.Uri.parse("package:com.openbezal.rhema.camera")));
+                    } catch (RuntimeException noUninstaller) {
+                        // Settings → Apps instead.
+                    }
+                }
+            });
+        }
         info(c, "This phone", Build.MANUFACTURER + " " + Build.MODEL + " · Android " + Build.VERSION.RELEASE);
         note(c, "Sends this phone's camera to Rhema Studio's camera router on the church network. Nothing goes to the internet.");
         LinearLayout adv = fold(c, "about");

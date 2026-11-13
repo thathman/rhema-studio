@@ -25,6 +25,11 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- No backup: the pairing link holds this camera's password. -->
+    <!-- The earlier build under the old package (before the Airix Media name): found, so it can be removed. -->
+    <queries>
+        <package android:name="com.openbezal.rhema.camera" />
+    </queries>
+
     <application
         android:label="Rhema Studio Cam"
         android:icon="@mipmap/ic_launcher"

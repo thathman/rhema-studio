@@ -21,6 +21,11 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
+    <!-- The earlier build under the old package (before the Airix Media name): found, so it can be removed. -->
+    <queries>
+        <package android:name="com.openbezal.rhema.receiver" />
+    </queries>
+
     <application
         android:label="Rhema Studio Receiver"
         android:icon="@drawable/icon"
