@@ -44,8 +44,7 @@ export function TeamWorkspace() {
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="eyebrow">Plan together · present confidently</p>
-            <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Your studio. Your people.</h1>
+            <h1 className="text-2xl leading-tight font-semibold tracking-tight">Team</h1>
             <p className="mt-1 text-xs text-muted-foreground">Share the preparation. Keep the live production computer fully in control.</p>
           </div>
           <Button variant="outline" onClick={() => openConnectionsHub()}><NetworkIcon /> Connections</Button>

@@ -246,8 +246,7 @@ export function PrepareWorkspace() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-3 max-[1200px]:px-5 [@media(max-height:860px)]:pt-3 [@media(max-height:860px)]:pb-2">
         <div className="min-w-0">
-          <p className="eyebrow">Plan the whole experience</p>
-          <h1 className="mt-1 truncate text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">{weekday ? `${weekday} run of show.` : "Your run of show."}</h1>
+          <h1 className="truncate text-2xl leading-tight font-semibold tracking-tight">Prepare{weekday ? ` · ${weekday}` : ""}</h1>
           <p className="mt-1 text-xs text-muted-foreground">Service sections, timing, content, signals and team instructions — one coherent timeline. Nothing here goes live.</p>
         </div>
         <div className="flex items-center gap-2">
