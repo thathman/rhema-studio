@@ -101,6 +101,8 @@ export function PrepareWorkspace() {
   const [removePhasesOpen, setRemovePhasesOpen] = useState(false)
   // On a narrower window the timing column folds away; this brings it back over the editor.
   const [timingOpen, setTimingOpen] = useState(false)
+  // Until the service has phases, Timing has nothing to plan: it folds behind its button at every width (UX audit P5).
+  const hasPhases = useQueueStore((s) => s.headers.some((h) => h.type === "phase"))
   const weekday = service?.service_date ? new Date(`${service.service_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long" }) : null
   const eventTarget: EventInsertionTarget = selectedEvent
     ? { kind: "section", headerId: selectedEvent.id }
@@ -270,7 +272,7 @@ export function PrepareWorkspace() {
           <AddItems onSelectAddedItem={selectAddedItem} />
           <Button
             variant="outline"
-            className="hidden max-[1280px]:inline-flex"
+            className={hasPhases ? "hidden max-[1280px]:inline-flex" : undefined}
             aria-expanded={timingOpen}
             aria-controls="prepare-timing"
             onClick={() => setTimingOpen((o) => !o)}
@@ -291,7 +293,7 @@ export function PrepareWorkspace() {
 
       <PhaseStrip onSelectPhase={focusPhase} />
 
-      <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(16rem,20rem)] gap-4 px-8 pb-6 max-[1280px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] max-[1200px]:px-5">
+      <div className={cn("relative grid min-h-0 flex-1 gap-4 px-8 pb-6 max-[1280px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] max-[1200px]:px-5", hasPhases ? "grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(16rem,20rem)]" : "grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]")}>
         <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-panel" data-tour="prepare-rundown">
           <div className="flex flex-col gap-2 border-b border-border px-4 py-3">
             <div className="flex items-start justify-between gap-2">
@@ -371,9 +373,11 @@ export function PrepareWorkspace() {
           aria-label="Timing"
           className={cn(
             "flex min-h-0 flex-col",
-            timingOpen
-              ? "max-[1280px]:absolute max-[1280px]:top-0 max-[1280px]:right-8 max-[1200px]:right-5 max-[1280px]:bottom-6 max-[1280px]:z-10 max-[1280px]:w-80 max-[1280px]:max-w-[calc(100%-2.5rem)] max-[1280px]:rounded-lg max-[1280px]:shadow-lg"
-              : "max-[1280px]:hidden",
+            !hasPhases
+              ? timingOpen ? "absolute top-0 right-8 bottom-6 z-10 w-80 max-w-[calc(100%-2.5rem)] rounded-lg shadow-lg max-[1200px]:right-5" : "hidden"
+              : timingOpen
+                ? "max-[1280px]:absolute max-[1280px]:top-0 max-[1280px]:right-8 max-[1200px]:right-5 max-[1280px]:bottom-6 max-[1280px]:z-10 max-[1280px]:w-80 max-[1280px]:max-w-[calc(100%-2.5rem)] max-[1280px]:rounded-lg max-[1280px]:shadow-lg"
+                : "max-[1280px]:hidden",
           )}
         >
           <TimingPanel />
