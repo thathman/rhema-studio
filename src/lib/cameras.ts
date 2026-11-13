@@ -64,11 +64,13 @@ export interface PhoneReport {
   agoMs: number
 }
 
+const BATTERY_HOT = 45
 const THERMAL = ["normal", "warm", "hot", "very hot", "critical", "emergency", "shutting down"]
 
 /**
  * A phone's battery and heat in words, and what to warn about: a battery under 20% that is not
- * charging, and a phone hot enough that Android (or the app) slows it down.
+ * charging, a phone hot enough that Android (or the app) slows it down, and a battery at 45 °C or
+ * more even when Android does not (the Vsmart ran at 51 °C with thermal status 0, 12 Nov).
  */
 export function phoneWords(p: PhoneReport): { text: string; warnings: string[] } {
   const parts: string[] = []
@@ -80,6 +82,8 @@ export function phoneWords(p: PhoneReport): { text: string; warnings: string[] }
   if (p.battery !== null && p.battery < 20 && !p.charging) warnings.push(`Battery low (${Math.round(p.battery)}%) and not charging: plug the phone in`)
   if ((p.thermal ?? 0) >= 4) warnings.push("The phone is critically hot and may stop sending: give it air or shade now")
   else if ((p.thermal ?? 0) >= 2 || p.cooling) warnings.push("The phone is hot: Rhema Studio Cam sends a smaller or slower picture to cool it. Give it air or shade, or take it off its charger")
+  // ponytail: one fixed limit; 45 °C is where phone makers stop charging a battery.
+  else if (p.temperature !== null && p.temperature >= BATTERY_HOT) warnings.push(`The phone's battery is hot (${Math.round(p.temperature)} °C): give it air or shade, or take it off its charger`)
   return { text: parts.join(" · ") || "Reporting", warnings }
 }
 
