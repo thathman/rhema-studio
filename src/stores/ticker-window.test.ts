@@ -15,7 +15,7 @@ const at = (hh: number, mm: number) => new Date(2026, 10, 13, hh, mm).getTime()
 
 beforeEach(() => {
   take.mockClear(); stop.mockClear()
-  useTickerWindow.setState({ armed: null, took: false })
+  useTickerWindow.setState({ armed: null, took: false, started: false })
   useBroadcastStore.setState({ ticker: null, rehearsal: false })
   useSettingsStore.getState().setSetup({ timeZone: "" })
 })
@@ -38,7 +38,7 @@ describe("the ticker on a clock window (#187)", () => {
   it("takes at once when armed inside the window; refuses a window that has passed or runs backwards", () => {
     expect(useTickerWindow.getState().arm("10:00", "10:30", "Ade", at(10, 10))).toBeNull()
     expect(take).toHaveBeenCalledTimes(1)
-    useTickerWindow.setState({ armed: null, took: false })
+    useTickerWindow.setState({ armed: null, took: false, started: false })
     expect(useTickerWindow.getState().arm("09:00", "09:30", "Ade", at(10, 0))).toContain("has passed")
     expect(useTickerWindow.getState().arm("10:30", "10:00", "Ade", at(9, 0))).toContain("after it starts")
   })
@@ -48,8 +48,10 @@ describe("the ticker on a clock window (#187)", () => {
     useBroadcastStore.setState({ rehearsal: true })
     checkTickerWindow(at(10, 5))
     expect(take).not.toHaveBeenCalled()
+    // An operator took it themself during rehearsal's wait: the window finds it on, leaves it, and leaves it on.
     useBroadcastStore.setState({ rehearsal: false, ticker: { backing: null } as never })
-    useTickerWindow.setState({ took: false })
+    checkTickerWindow(at(10, 6))
+    expect(take).not.toHaveBeenCalled()
     checkTickerWindow(at(10, 31))
     expect(stop).not.toHaveBeenCalled()
   })

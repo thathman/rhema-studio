@@ -15,6 +15,8 @@ interface TickerWindowState {
   armed: { from: string; until: string; by: string | null } | null
   /** The window took the ticker (so it may stop it). */
   took: boolean
+  /** The window's From has been acted on (taken, or found already on). */
+  started: boolean
   /** Arm a window ("HH:MM" on the church's clock, `from` before `until`, the same day). Null when armed, else why not. */
   arm: (from: string, until: string, by?: string, now?: number) => string | null
   disarm: (by?: string) => void
@@ -26,19 +28,20 @@ const zone = () => validTimeZone(useSettingsStore.getState().setup.timeZone)
 export const useTickerWindow = create<TickerWindowState>((set, get) => ({
   armed: null,
   took: false,
+  started: false,
   arm: (from, until, by, now = Date.now()) => {
     const a = minutes(from), b = minutes(until)
     if (a === null || b === null) return "give both times as HH:MM"
     if (b <= a) return "the ticker must stop after it starts (on the same day)"
     if (minutesOfDay(now, zone()) >= b) return `${until} has passed today`
-    set({ armed: { from, until, by: by ?? null }, took: false })
+    set({ armed: { from, until, by: by ?? null }, took: false, started: false })
     useJournalStore.getState().add({ kind: "remote", label: `${by ? `${by}: ` : ""}ticker armed for ${from}–${until}` })
     checkTickerWindow(now)
     return null
   },
   disarm: (by) => {
     if (!get().armed) return
-    set({ armed: null, took: false })
+    set({ armed: null, took: false, started: false })
     useJournalStore.getState().add({ kind: "remote", label: `${by ? `${by}: ` : ""}ticker window disarmed` })
   },
 }))
@@ -52,13 +55,14 @@ export function checkTickerWindow(now = Date.now()): void {
   const from = minutes(w.armed.from)!, until = minutes(w.armed.until)!
   if (m >= until) {
     if (w.took && b.ticker && !b.rehearsal) void CUE_ACTIONS["ticker.stop"].run()
-    useTickerWindow.setState({ armed: null, took: false })
+    useTickerWindow.setState({ armed: null, took: false, started: false })
     useJournalStore.getState().add({ kind: "remote", label: `ticker window ${w.armed.from}–${w.armed.until} ended` })
     return
   }
   // Never in rehearsal (it would put the ticker on the real screens' plan): it waits.
-  if (m >= from && !w.took && !b.rehearsal) {
-    useTickerWindow.setState({ took: true })
+  if (m >= from && !w.took && !w.started && !b.rehearsal) {
+    // Already on (an operator took it): the window leaves it, and leaves it on at Until.
+    useTickerWindow.setState({ started: true, took: !b.ticker })
     if (!b.ticker) void CUE_ACTIONS["ticker.take"].run()
   }
 }
