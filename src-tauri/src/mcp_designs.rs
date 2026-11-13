@@ -80,9 +80,26 @@ const ADDRESS_KEYS: [&str; 9] = ["src", "imageUrl", "videoUrl", "cameraUrl", "ur
 fn is_address(t: &str) -> bool {
     let l = t.trim_start().to_ascii_lowercase();
     l.starts_with("asset:") || l.starts_with("http://asset.localhost") || l.starts_with("https://asset.localhost") || l.starts_with("file:") || l.starts_with("blob:") || l.starts_with("data:")
-        || l.starts_with("\\\\") || l.starts_with("~/") || l.starts_with("/users/") || l.starts_with("/home/") || l.starts_with("/volumes/") || l.starts_with("/private/")
+        || l.starts_with("\\\\") || l.starts_with("~/")
+        // An absolute path: a slash-led word with another slash in it ("/ Pastor" is words, kept).
+        || (l.starts_with('/') && l.split_whitespace().next().is_some_and(|w| w[1..].contains('/')))
+        || private_host(&l)
         || (l.len() > 2 && l.as_bytes()[1] == b':' && l.as_bytes()[0].is_ascii_alphabetic() && matches!(l.as_bytes()[2], b'\\' | b'/'))
         || l.contains("url(")
+}
+
+/// A web address on this computer or the church's network (loopback, private or link-local).
+fn private_host(l: &str) -> bool {
+    let Some(rest) = l.strip_prefix("http://").or_else(|| l.strip_prefix("https://")).or_else(|| l.strip_prefix("rtsp://")).or_else(|| l.strip_prefix("rtsps://")).or_else(|| l.strip_prefix("srt://")).or_else(|| l.strip_prefix("ws://")).or_else(|| l.strip_prefix("wss://")) else { return false };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = host.rsplit('@').next().unwrap_or(host);
+    let host = if host.starts_with('[') { host.split(']').next().unwrap_or(host).trim_start_matches('[') } else { host.split(':').next().unwrap_or(host) };
+    if host == "localhost" || host.ends_with(".local") || host.ends_with(".localhost") { return true }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified(),
+        Ok(std::net::IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unspecified() || (ip.segments()[0] & 0xfe00) == 0xfc00 || (ip.segments()[0] & 0xffc0) == 0xfe80,
+        Err(_) => false,
+    }
 }
 
 /// The document with every local file address taken out (pictures keep their media id): this
@@ -203,14 +220,15 @@ mod tests {
             "scene": { "nodes": [
                 { "type": "text", "text": "/ Pastor Ade", "fill": "url(file:///Users/a/x.png)" },
                 { "type": "image", "srcs": ["C:\\Users\\a\\x.png", "\\\\server\\share\\y.png", "data:image/png;base64,AAAA", "keep me"] },
-                { "type": "image", "src": "http://asset.localhost/C%3A%5Cx.png", "note": "/Users/a/secret.png" }
+                { "type": "image", "src": "http://asset.localhost/C%3A%5Cx.png", "note": "/Users/a/secret.png", "tmp": "/var/folders/x/y.png", "lan": "rtsp://10.0.0.5:8554/cam", "v6": "http://[fe80::1]/x" },
+                { "type": "text", "text": "Visit https://example.org/give" }
             ] }
         });
         let out = without_local_addresses(doc).to_string();
-        for leak in ["asset", "192.168", "file:", "Users", "server", "data:image"] {
+        for leak in ["asset", "192.168", "file:", "Users", "server", "data:image", "/var/", "10.0.0.5", "fe80"] {
             assert!(!out.contains(leak), "{leak} in {out}");
         }
-        for kept in ["/ Pastor Ade", "keep me", "m1"] {
+        for kept in ["/ Pastor Ade", "keep me", "m1", "https://example.org/give"] {
             assert!(out.contains(kept), "{kept} kept in {out}");
         }
     }
