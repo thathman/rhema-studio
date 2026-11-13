@@ -1050,7 +1050,9 @@ function RunningLate() {
   // The main phase as the engine finds it (its role, else the first manual phase); only before the
   // service begins: once it runs, the engine times from when it really started.
   const planned = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
-  const { state: run } = useServiceTiming()
+  const { state: run, first } = useServiceTiming()
+  // Before anything has gone on air: also during a hold before the start ("we'll start at 10:40").
+  const notBegun = run === "idle" || (run === "held" && first == null)
   const [startAt, setStartAt] = useState("")
   const [startWhy, setStartWhy] = useState<string | null>(null)
   return (
@@ -1059,7 +1061,7 @@ function RunningLate() {
       <Button size="sm" variant="outline" onClick={() => useServiceOffset.getState().adjust(-5, me)}>−5 min</Button>
       <Button size="sm" variant="outline" onClick={() => useServiceOffset.getState().adjust(5, me)}>+5 min</Button>
       {minutes !== 0 && <Button size="sm" variant="ghost" onClick={() => useServiceOffset.getState().reset(me)}>On schedule</Button>}
-      {planned && run === "idle" && (
+      {planned && notBegun && (
         <form className="flex items-center gap-1" onSubmit={(e) => {
           e.preventDefault()
           const ok = useServiceOffset.getState().startAt(startAt, planned, me)
@@ -1067,7 +1069,7 @@ function RunningLate() {
           if (ok) setStartAt("")
         }}>
           <label className="text-muted-foreground" htmlFor="running-start-at">Service starts at</label>
-          <input id="running-start-at" type="time" value={startAt} onChange={(e) => setStartAt(e.target.value)} className="h-7 rounded-md border border-input bg-card px-1.5" />
+          <input id="running-start-at" type="time" value={startAt} onChange={(e) => { setStartAt(e.target.value); setStartWhy(null) }} className="h-7 rounded-md border border-input bg-card px-1.5" />
           <Button size="sm" variant="outline" type="submit" disabled={!startAt} title={`Planned ${planned}: the lateness becomes the minutes between them`}>Set</Button>
           {startWhy && <span role="alert" className="text-confidence-mid">{startWhy}</span>}
         </form>

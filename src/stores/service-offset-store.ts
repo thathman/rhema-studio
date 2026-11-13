@@ -25,9 +25,9 @@ interface OffsetState {
   reset: (by?: string) => void
   /**
    * Running late until a time (#196): the main service now starts at `at` ("HH:MM") instead of its
-   * planned `planned`: the offset becomes the minutes between them (on the same day).
+   * planned `planned`: the offset becomes the minutes between them, the nearest day across midnight.
+   * False (and nothing changed) when `at` is not a time or is more than 2 hours early or 4 hours late.
    */
-  /** False (and nothing changed) when `at` is not a time or is more than 2 hours early or 4 hours late. */
   startAt: (at: string, planned: string, by?: string) => boolean
 }
 
