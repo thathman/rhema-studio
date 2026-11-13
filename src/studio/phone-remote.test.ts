@@ -203,14 +203,16 @@ describe("phone remote: what it saw, and what the screens show (11 Nov review S3
 
   it("a second quick press of the same part is not refused as if someone else had changed it (review of #870)", async () => {
     // The main computer moves the lyrics revision twice for one step: once taking it, once more
-    // when the screens publish it a moment later. It refuses a step whose seen lyrics is old.
-    let rev = 5, index = 0
+    // when the screens publish it a moment later. It refuses a step whose seen lyrics is old,
+    // unless this desk's own run of quick steps moved it since (http.rs OwnPresses, #827).
+    let rev = 5, index = 0, floor = -1
     const { commands } = host(() => ({ v: 1, program: { onAir: true }, lyrics: { itemId: "s1", index }, revisions: { lyrics: rev }, sources: [], notices: [] }), {
       role: "worship",
       answer: (b) => {
         if (b.command !== "song_section") return null
         const seen = (b.seen as Record<string, number> | undefined)?.lyrics
-        if (seen !== undefined && seen !== rev) return new Response(JSON.stringify({ success: false, error: "Someone changed this first — look again", code: "stale" }), { status: 409 })
+        if (seen !== undefined && seen !== rev && !(floor >= 0 && seen >= floor)) return new Response(JSON.stringify({ success: false, error: "Someone changed this first — look again", code: "stale" }), { status: 409 })
+        if (floor < 0) floor = rev
         rev += 1
         setTimeout(() => { index += 1; rev += 1 }, 300)
         return null
@@ -227,7 +229,8 @@ describe("phone remote: what it saw, and what the screens show (11 Nov review S3
     await vi.waitFor(() => expect(commands()).toHaveLength(2))
     await vi.waitFor(() => expect(next.disabled).toBe(false))
     expect(document.getElementById("msg")!.textContent).not.toContain("changed since")
-    expect(commands()[1].seen).not.toHaveProperty("lyrics")
+    // It still says what it saw, so a change from another desk in between is refused.
+    expect(commands()[1].seen).toHaveProperty("lyrics")
     // And the second step is confirmed from the Live State like the first.
     await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toBe("Done: the screens show it."), { timeout: 3000 })
   })
