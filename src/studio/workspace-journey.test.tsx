@@ -279,7 +279,7 @@ describe("Prepare → Permissions → Live journey", () => {
 
     await act(async () => navButton("People & access").click())
     expect(host.textContent).toContain("Approval Requests")
-    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved version"))!.click())
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied" }])
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
@@ -344,8 +344,8 @@ describe("Prepare → Permissions → Live journey", () => {
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
     await act(async () => navButton("People & access").click())
-    expect(host.textContent).toContain("revision 5")
-    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
+    expect(host.textContent).toContain("version 5")
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved version"))!.click())
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied", payload: { revision: 5 } }])
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
@@ -487,9 +487,9 @@ describe("Prepare → Permissions → Live journey", () => {
     expect(useBroadcastStore.getState().liveVerse).toBe(programBefore)
 
     await act(async () => navButton("People & access").click())
-    expect(host.textContent).toContain("revision 5")
+    expect(host.textContent).toContain("version 5")
     await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click()
+      [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Confirm approved version"))!.click()
       await vi.waitFor(() => expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied", payload: { revision: 5 } }]))
     })
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "approval-1", state: "applied", payload: { revision: 5 } }])

@@ -278,7 +278,7 @@ describe("Permissions workspace", () => {
 
     expect(el.textContent).toContain("Approval Requests")
     expect(el.textContent).toContain("New scene · no prior main computer revision")
-    expect(el.textContent).toContain("Approved scenes need an explicit Apply and never Take to Program")
+    expect(el.textContent).toContain("Approving never puts anything on a screen")
     expect(el.textContent).toContain("Remote scene")
     expect(el.textContent).toContain("Blank composition · no visual layers")
     expect(el.textContent).toContain("No current local scene")
@@ -380,11 +380,11 @@ describe("Permissions workspace", () => {
     const el = await mount()
 
     expect(el.textContent).toContain("Sunday service")
-    expect(el.textContent).toContain("revision 4")
-    expect(el.textContent).toContain("Approve this exact revision in Prepare first")
+    expect(el.textContent).toContain("version 4")
+    expect(el.textContent).toContain("Approve that version in Prepare first")
     await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Open in Prepare"))!.click())
     expect(useShellStore.getState().prepareProgramRequest).toEqual({ programId: "service-1" })
-    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
+    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Confirm approved version"))!.click())
 
     expect(tauri.invoke).toHaveBeenCalledWith("approvals_apply", { id: "plan-request-uuid" })
     expect(useApprovalRequestsStore.getState().requests).toMatchObject([{ id: "plan-request-uuid", state: "applied" }])
@@ -467,7 +467,7 @@ describe("Permissions workspace", () => {
     const outputStateBefore = useBroadcastStore.getState().outputs
     const el = await mount()
 
-    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Confirm approved revision"))!.click())
+    await act(async () => [...el.querySelectorAll("button")].find((button) => button.textContent?.includes("Confirm approved version"))!.click())
 
     expect(tauri.invoke).toHaveBeenCalledWith("approvals_apply", { id: "plan-request-uuid" })
     expect(el.textContent).toContain("Approve this revision of the plan in Prepare first")
@@ -501,7 +501,7 @@ describe("Permissions workspace", () => {
     const outputsBefore = useBroadcastStore.getState().outputs
     const el = await mount()
 
-    expect(el.textContent).toContain("Apply checks the scene revision and current output assignment on this computer")
+    expect(el.textContent).toContain("It does not put the scene on a screen")
     await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Apply approved scene change"]')!.click())
 
     expect(tauri.invoke).toHaveBeenCalledWith("approvals_apply", { id: "scene-request-uuid" })
@@ -947,7 +947,7 @@ describe("Permissions workspace", () => {
     ["requested_changes", "The main computer's requested changes. The scene remains in the library"],
     ["expired", "This deletion request expired. The scene remains in the library."],
     ["withdrawn", "This deletion request was withdrawn. The scene remains in the library."],
-    ["superseded", "This deletion request is stale. The scene remains in the library"],
+    ["superseded", "This request is out of date: the scene has changed since"],
   ] as const)("does not describe a %s deletion as executable", async (state, notice) => {
     const request = {
       id: `scene-delete-${state}`, kind: "scene_delete", targetId: "scene-1", baseRevision: 7,
