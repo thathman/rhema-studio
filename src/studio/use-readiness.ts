@@ -35,6 +35,7 @@ import { useAuxTimers } from "@/stores/aux-timers-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useDismissedChecks } from "@/studio/dismissed-checks"
 import { clippedText } from "@/lib/clipped-text"
+import { onThemeFontsLoaded } from "@/lib/verse-renderer"
 
 watchLanAddressAtService()
 
@@ -183,7 +184,14 @@ export function useReadiness() {
     return at === null || !size ? [] : [{ name: o.name, role: o.role ?? "congregation", monitor: monitorNames[at] ?? null, width: size.width, height: size.height, onMain: primaryMonitor === at && monitorSizes.length > 1 }]
   })
   // Planned words a congregation screen would cut off (#217): measured, so only when they change.
-  const clipped = useMemo(() => clippedText(items, songs, outputs, themes), [items, songs, outputs, themes])
+  const [fontsSeen, setFontsSeen] = useState(0)
+  useEffect(() => onThemeFontsLoaded(() => setFontsSeen((n) => n + 1)), [])
+  const clippedList = useMemo(() => clippedText(items, songs, outputs, themes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fontsSeen: measured again once a look's font arrives
+    [items, songs, outputs, themes, fontsSeen])
+  // Put away for this service with Got it; a different set of long slides asks again.
+  const clippedKey = `clipped:${current?.id ?? ""}:${clippedList.map((c) => c.what + "@" + c.output).join("|")}`
+  const clipped = clippedList.length && !dismissed.includes(clippedKey) ? { list: clippedList, dismiss: clippedKey } : undefined
   const obsLabel = obsProfiles.find((p) => p.host.trim().toLowerCase() === obsSettings.host.trim().toLowerCase() && p.port === obsSettings.port)?.label ?? null
   const { ready, checks } = computeReadiness({
     translationsLoaded: translations.length,

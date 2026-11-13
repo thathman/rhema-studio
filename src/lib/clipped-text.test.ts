@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 // Measuring is the renderer's job (tested there): here, "too long" is any text over 40 letters.
 vi.mock("@/lib/verse-renderer", () => ({
+  onThemeFontsLoaded: () => () => {},
   textClipped: (_theme: unknown, v: { lines?: string[]; secondaryLines?: string[]; segments: Array<{ text: string }> }) =>
     [...(v.lines ?? v.segments.map((s) => s.text)), ...(v.secondaryLines ?? [])].join(" ").length > 40,
 }))
@@ -34,13 +35,21 @@ describe("words a congregation screen would cut off (#217)", () => {
     const song = {
       song: { id: "s1", title: "Abide", primary_language: "en", licence: "public_domain" },
       sections: [{ id: "v1", kind: "verse", label: "Verse 1", texts: { en: "Abide with me fast falls the eventide", yo: "Ba mi gbe ale le tan ni kiakia oluwa" } }],
-      arrangements: [],
+      arrangements: [{ id: "a", name: "Default", is_default: true, sequence: ["v1", "v1"] }],
+      numbers: [],
     } as unknown as SongWithSections
     const item = { id: "i", kind: "song", reference: "Abide", song: { song_id: "s1", title: "Abide", languages: ["en", "yo"] }, confidence: 1, source: "manual", added_at: 0 } as unknown as QueueItem
     const both = clippedText([item], { s1: song }, [output("Main Display")], [theme])
     const english = clippedText([item], { s1: song }, [output("Main Display", { language: "first" })], [theme])
-    expect(both.length).toBeGreaterThan(0)
+    // A section sung twice is one slide to fix, said once.
+    expect(both).toEqual([{ what: "Abide · Verse 1", output: "Main Display" }])
     expect(english).toEqual([])
     expect(clippedText([item], {}, [output("Main Display")], [theme])).toEqual([])
+  })
+
+  it("leaves out screens that never show it: a Bible-only feed for songs, a scene", () => {
+    const long = [verse("Psalm 119:1", "Blessed are the undefiled in the way, who walk in the law")]
+    const outputs = [output("Songs feed", { shows: ["song"] }), output("Camera", { sceneId: "cam" }), output("Bible feed", { shows: ["bible"] })]
+    expect(clippedText(long, {}, outputs, [theme])).toEqual([{ what: "Psalm 119:1", output: "Bible feed" }])
   })
 })
