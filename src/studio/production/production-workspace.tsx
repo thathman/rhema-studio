@@ -1,3 +1,4 @@
+import { tablistKeys } from "@/lib/tablist-keys"
 import { PRODUCTION_TABS } from "@/studio/production/production-tab"
 import { useDismissedChecks } from "@/studio/dismissed-checks"
 import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
@@ -116,7 +117,7 @@ export function ProductionWorkspace({ embedded = false, expanded = false, hideTa
           </header>
         )}
         {/* Inside Live's tools dock the dock's own row names these tools (UX audit: one row of tabs). */}
-        {!hideTabs && <nav role="tablist" aria-label={embedded ? "Live operation tools" : "Production"} className="flex shrink-0 flex-wrap gap-1 border-b border-border">
+        {!hideTabs && <nav onKeyDown={tablistKeys} role="tablist" aria-label={embedded ? "Live operation tools" : "Production"} className="flex shrink-0 flex-wrap gap-1 border-b border-border">
           {PRODUCTION_TABS.map(([id, label]) => (
             <button
               key={id}

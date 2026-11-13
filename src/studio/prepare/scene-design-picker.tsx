@@ -1,3 +1,4 @@
+import { tablistKeys } from "@/lib/tablist-keys"
 import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -233,7 +234,7 @@ export function SceneDesignPicker({
             )}
             <p className="text-xs text-muted-foreground">Changing the audience on an approved service changes its approval scope; refresh approval before taking the design.</p>
           </fieldset>
-          <div role="tablist" aria-label="Scene source" className="flex gap-1 border-b border-border">
+          <div onKeyDown={tablistKeys} role="tablist" aria-label="Scene source" className="flex gap-1 border-b border-border">
             <button type="button" role="tab" aria-selected={source === "my-designs"} disabled={designEditorDirty || creatingTemplate} onClick={() => setSource("my-designs")} className="border-b-2 border-transparent px-3 py-2 text-xs font-semibold aria-selected:border-primary aria-selected:text-primary-text disabled:cursor-not-allowed disabled:opacity-50">My Designs</button>
             <button type="button" role="tab" aria-selected={source === "templates"} disabled={designEditorDirty || creatingTemplate} onClick={() => setSource("templates")} className="border-b-2 border-transparent px-3 py-2 text-xs font-semibold aria-selected:border-primary aria-selected:text-primary-text disabled:cursor-not-allowed disabled:opacity-50">Templates</button>
           </div>
