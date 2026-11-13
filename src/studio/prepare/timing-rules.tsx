@@ -41,7 +41,7 @@ export function TimingRules({ item }: { item: QueueItem }) {
         <p className="text-muted-foreground">It takes no minutes{planned ? ` (its ${formatDuration(planned)} planned are not counted)` : ""}: what follows starts as it is reached, and it is marked reached once something after it starts. Countdowns can count to it as the next item.</p>
       ) : (
         <>
-          <div className="grid grid-cols-[6.5rem_7rem] gap-2">
+          <div className="grid grid-cols-[6.5rem_7rem_8rem] gap-2">
             <label className="min-w-0">
               <span className={label} title="The longest it may run before it counts as over">May run to</span>
               <DurationInput
@@ -60,6 +60,20 @@ export function TimingRules({ item }: { item: QueueItem }) {
               >
                 <option value="">As usual ({DEFAULT_WARN_MINUTES} min)</option>
                 {WARN_CHOICES.map((m) => <option key={m} value={m}>{m} min</option>)}
+              </select>
+            </label>
+            {/* How a countdown display shows this item's time (#196). */}
+            <label className="min-w-0">
+              <span className={label} title="On countdown displays that count the item on now; the service timer and stage warnings are unchanged">Countdown display</span>
+              <select
+                aria-label={`How countdown displays time ${item.reference}`}
+                value={rules?.timer ?? ""}
+                onChange={(e) => setRules(item.id, { timer: e.target.value === "up" || e.target.value === "none" ? e.target.value : undefined })}
+                className="h-7 w-full rounded-md border border-input bg-card px-1.5"
+              >
+                <option value="">Counts down</option>
+                <option value="up">Counts up</option>
+                <option value="none">No timer</option>
               </select>
             </label>
           </div>
