@@ -73,22 +73,40 @@ fn now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(0))
 }
 
+/// Keys that hold an address of a file or device on this computer or network.
+const ADDRESS_KEYS: [&str; 9] = ["src", "imageUrl", "videoUrl", "cameraUrl", "url", "href", "mediaFile", "file", "path"];
+
+/// A string that is a local or embedded address, wherever it appears.
+fn is_address(t: &str) -> bool {
+    let l = t.trim_start().to_ascii_lowercase();
+    l.starts_with("asset:") || l.starts_with("http://asset.localhost") || l.starts_with("https://asset.localhost") || l.starts_with("file:") || l.starts_with("blob:") || l.starts_with("data:")
+        || l.starts_with("\\\\") || l.starts_with("~/") || l.starts_with("/users/") || l.starts_with("/home/") || l.starts_with("/volumes/") || l.starts_with("/private/")
+        || (l.len() > 2 && l.as_bytes()[1] == b':' && l.as_bytes()[0].is_ascii_alphabetic() && matches!(l.as_bytes()[2], b'\\' | b'/'))
+        || l.contains("url(")
+}
+
 /// The document with every local file address taken out (pictures keep their media id): this
-/// computer's folders are never handed to an assistant.
+/// computer's folders and devices are never handed to an assistant. Words in text layers stay.
 fn without_local_addresses(mut v: Value) -> Value {
     fn walk(v: &mut Value) {
         match v {
             Value::Object(map) => {
-                map.retain(|_, x| !x.as_str().is_some_and(|t| { let t = t.to_ascii_lowercase(); t.starts_with("asset:") || t.starts_with("http://asset.localhost") || t.starts_with("https://asset.localhost") || t.starts_with("file:") || t.starts_with('/') }));
+                map.retain(|k, x| !(ADDRESS_KEYS.contains(&k.as_str()) && x.is_string()) && !x.as_str().is_some_and(is_address));
                 map.values_mut().for_each(walk);
             }
-            Value::Array(list) => list.iter_mut().for_each(walk),
+            Value::Array(list) => {
+                list.retain(|x| !x.as_str().is_some_and(is_address));
+                list.iter_mut().for_each(walk);
+            }
             _ => {}
         }
     }
     walk(&mut v);
     v
 }
+
+/// The most of a design's document handed to an assistant (it is sent twice: as text and structured).
+const MAX_DOCUMENT_BYTES: usize = 256 * 1024;
 
 /// The design tools' answers; None for a name that is not one of them.
 pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
@@ -106,7 +124,12 @@ pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
             let Some(c) = &s.content else { return Some(tool_error(s.problem.as_deref().unwrap_or("no designs"))) };
             let Some(id) = a.get("id").and_then(Value::as_str) else { return Some(tool_error("give the design's id (from rhema_list_designs)")) };
             match c.get_design(id) {
-                Ok(Some(d)) => text(&json!({ "id": d.id, "title": d.title, "kind": d.kind, "revision": d.revision, "latestVersion": d.latest_version, "updatedAt": d.updated_at, "archived": d.archived_at.is_some(), "assistantMayRevise": c.assistant_may_revise_design(&d.id).unwrap_or(false), "document": without_local_addresses(d.document) })),
+                Ok(Some(d)) => {
+                    let may_revise = c.assistant_may_revise_design(&d.id).unwrap_or(false);
+                    let doc = without_local_addresses(d.document);
+                    let document = if doc.to_string().len() > MAX_DOCUMENT_BYTES { json!({ "omitted": "This design is too large to read here; open it in Rhema Studio → Design → My Designs." }) } else { doc };
+                    text(&json!({ "id": d.id, "title": d.title, "kind": d.kind, "revision": d.revision, "latestVersion": d.latest_version, "updatedAt": d.updated_at, "archived": d.archived_at.is_some(), "assistantMayRevise": may_revise, "document": document }))
+                }
                 Ok(None) => tool_error("there is no design with that id"),
                 Err(e) => tool_error(&format!("could not read the design: {e}")),
             }
@@ -167,4 +190,28 @@ pub(super) fn call(s: &Server, name: &str, a: &Value) -> Option<Value> {
         }
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_addresses_never_reach_an_assistant_but_words_do() {
+        let doc = json!({
+            "bindings": { "p": { "kind": "picture", "mediaId": "m1", "imageUrl": "asset://localhost/%2FUsers%2Fa%2Fx.png" }, "c": { "kind": "camera", "cameraUrl": "http://192.168.3.90:8889/cam" } },
+            "scene": { "nodes": [
+                { "type": "text", "text": "/ Pastor Ade", "fill": "url(file:///Users/a/x.png)" },
+                { "type": "image", "srcs": ["C:\\Users\\a\\x.png", "\\\\server\\share\\y.png", "data:image/png;base64,AAAA", "keep me"] },
+                { "type": "image", "src": "http://asset.localhost/C%3A%5Cx.png", "note": "/Users/a/secret.png" }
+            ] }
+        });
+        let out = without_local_addresses(doc).to_string();
+        for leak in ["asset", "192.168", "file:", "Users", "server", "data:image"] {
+            assert!(!out.contains(leak), "{leak} in {out}");
+        }
+        for kept in ["/ Pastor Ade", "keep me", "m1"] {
+            assert!(out.contains(kept), "{kept} kept in {out}");
+        }
+    }
 }

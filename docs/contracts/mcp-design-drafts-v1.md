@@ -20,8 +20,8 @@ Code: `src-tauri/crates/content/src/design_proposal.rs` (check and build),
 | `rhema_list_designs` | no | Designs by title (`query`, `limit` ≤ 50), newest change first: id, title, kind, draft revision, latest version. No documents |
 | `rhema_validate_design_draft` | no | `{ design }` → `{ ok, errors: [{ at, message }], warnings, title, kind, pages, layers }`; every problem in one answer |
 | `rhema_create_design_draft` | one new design | Same check; on success `{ designId, revision: 1, warnings, next }`, otherwise `isError` with the same report in `structuredContent` |
-| `rhema_get_design` | no | `{ id }` → title, kind, draft revision, latest version, archived, `assistantMayRevise`, and the editor's document with every local file address removed (pictures keep their media id) |
-| `rhema_update_design_draft` | one draft it made | `{ id, revision, design }`: the same checks as create, then replaces that draft. Only a draft an assistant made over MCP that no person has saved since and that has no version, at the revision read (an older one: "read it again"). Otherwise refused (`not_assistant_draft`) and nothing changes |
+| `rhema_get_design` | no | `{ id }` → title, kind, draft revision, latest version, archived, `assistantMayRevise`, and the editor's document with every local file or device address removed (pictures keep their media id); a document over 256 KB is omitted with a note |
+| `rhema_update_design_draft` | one draft it made | `{ id, revision, design }`: the same checks as create, then replaces that draft. Only a draft an assistant made over MCP that no person has saved since and that has no version, at the revision read (an older one: "read it again"). Otherwise refused (`not_assistant_draft`) and nothing changes. At most one revision of a draft every 120 s (`too_soon`), so a person editing it can save; any assistant may revise any assistant's draft (the client name is self-declared) |
 
 ## The proposal
 

@@ -88,6 +88,9 @@ fn default_kind() -> String {
     "design".into()
 }
 
+/// An assistant revises one draft at most once in this many seconds (`revise_assistant_design`).
+pub const REVISE_EVERY_SECONDS: i64 = 120;
+
 impl ContentDb {
     /// Designs by title (no documents: a list of hundreds stays light), newest change first.
     /// Archived designs are listed too, with `archived_at` set, after every design still in the
@@ -190,6 +193,19 @@ impl ContentDb {
             let versioned: bool = tx.query_row("SELECT EXISTS (SELECT 1 FROM design_versions WHERE design_id = ?1)", params![id], |r| r.get(0))?;
             if versioned {
                 return refuse("this design has a version already: propose a new draft instead");
+            }
+            // ponytail: a person editing it while assistants revise again and again could never save
+            // (each revision makes their save stale). At most one revision in REVISE_EVERY_SECONDS gives
+            // them room; refusing while the editor has it open would need the app to say so.
+            if events.len() > 1 {
+                let recent: bool = tx.query_row(
+                    "SELECT updated_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?2) FROM design_documents WHERE id = ?1",
+                    params![id, format!("-{REVISE_EVERY_SECONDS} seconds")],
+                    |r| r.get(0),
+                )?;
+                if recent {
+                    return Err(ContentError::Refused { code: "too_soon", message: format!("this draft was revised less than {REVISE_EVERY_SECONDS} seconds ago: wait, so someone editing it can save") });
+                }
             }
             tx.execute(
                 "UPDATE design_documents SET title = ?2, kind = ?3, document = ?4, revision = revision + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",

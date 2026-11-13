@@ -149,7 +149,9 @@ fn an_opted_in_assistant_makes_an_editable_design_draft_and_nothing_else() {
     // Read back and revised by the same assistant, at the revision it read; never a local address.
     let got = mcp.tool("rhema_get_design", json!({ "id": id }));
     assert_eq!((got["structuredContent"]["revision"].as_i64(), got["structuredContent"]["assistantMayRevise"].as_bool()), (Some(1), Some(true)));
-    assert!(!got.to_string().contains("asset://") && !got.to_string().contains(dir.to_str().unwrap()), "no local address handed out");
+    for local in ["asset:", "asset.localhost", "file:", dir.to_str().unwrap()] {
+        assert!(!got.to_string().contains(local), "no local address handed out ({local})");
+    }
     let mut second = proposal(&pic.id);
     second["title"] = json!("Harvest, revised");
     let stale = mcp.tool("rhema_update_design_draft", json!({ "id": id, "revision": 7, "design": second }));

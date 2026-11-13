@@ -292,6 +292,12 @@ fn an_assistant_revises_only_its_own_untouched_unversioned_draft_at_the_revision
     assert_eq!((revised.revision, revised.title.as_str(), revised.latest_version), (2, "Second idea", None));
     // An old revision is a conflict, never an overwrite.
     assert!(matches!(db.revise_assistant_design(&draft.id, 1, &input("Late"), "Claude"), Err(rhema_content::ContentError::Conflict { expected: 1, actual: 2 })));
+    // Again straight away: too soon (a person editing it gets room to save).
+    let too_soon = match db.revise_assistant_design(&draft.id, 2, &input("Third"), "Claude") {
+        Err(rhema_content::ContentError::Refused { code, .. }) => code,
+        other => panic!("expected too_soon, got {other:?}"),
+    };
+    assert_eq!(too_soon, "too_soon");
 
     // A person saves it: it is theirs now.
     db.save_design_draft(&draft.id, 2, &input("Ada's edit")).unwrap();
