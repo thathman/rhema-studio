@@ -1544,7 +1544,7 @@ export function DesignDocumentEditor({
                   </div>
                 </section>
                 {selectedPaintNode && (
-                  selectedPaintNode.type === "rect" && selectedBinding?.kind === "color" || selectedPaintNode.type === "ellipse" && selectedBinding?.kind === "ellipse"
+                  (selectedPaintNode.type === "rect" || selectedPaintNode.type === "polygon") && selectedBinding?.kind === "color" || selectedPaintNode.type === "ellipse" && selectedBinding?.kind === "ellipse"
                     ? <PaintControls label="Fill" paint={selectedPaintNode.fill} accentColor={brandKit.colors.accent} onChange={(fill) => dispatch({ type: "SET_NODE_FILL", id: selectedPaintNode.id, fill })} />
                     : <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Fill colour
                         {selectedPaintNode.fill.type === "solid"
@@ -1552,6 +1552,25 @@ export function DesignDocumentEditor({
                           : <span className="text-[0.6875rem]">Gradient preserved</span>}
                       </label>
                 )}
+                {/* A line or arrow (#448): its colour, width and arrowheads, as outputs draw them. */}
+                {selectedRenderable.type === "line" && document.kind !== "template" && (() => {
+                  const line = selectedRenderable
+                  const color = line.stroke.type === "solid" ? line.stroke.color : "#ffffff"
+                  return (
+                    <section className="space-y-2 border-t border-border pt-3" aria-label="Line">
+                      <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Line colour
+                        <Input type="color" aria-label="Line colour" value={color} onChange={(event) => updateNode({ ...line, stroke: { type: "solid", color: event.currentTarget.value } })} className="h-8 w-14 p-1" />
+                      </label>
+                      <label className="flex items-center justify-between gap-2 text-[0.6875rem] font-medium text-muted-foreground">Width (px)
+                        <Input type="number" aria-label="Line width" min={1} max={200} value={line.strokeWidth} onChange={(event) => { const w = Number(event.currentTarget.value); if (w >= 1 && w <= 200) updateNode({ ...line, strokeWidth: w }) }} className="h-8 w-20" />
+                      </label>
+                      <div className="flex gap-3 text-[0.6875rem]">
+                        <label className="flex items-center gap-1"><input type="checkbox" checked={line.arrowStart} onChange={(event) => updateNode({ ...line, arrowStart: event.currentTarget.checked })} /> Arrow at start</label>
+                        <label className="flex items-center gap-1"><input type="checkbox" checked={line.arrowEnd} onChange={(event) => updateNode({ ...line, arrowEnd: event.currentTarget.checked })} /> Arrow at end</label>
+                      </div>
+                    </section>
+                  )
+                })()}
                 {(selectedRenderable.type === "text" || !!selectedPaintNode) && (
                   <section className="space-y-2 border-t border-border pt-3" aria-label="Brand Kit styles">
                     <h4 className="text-[0.6875rem] font-semibold">Brand Kit</h4>

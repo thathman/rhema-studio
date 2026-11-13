@@ -218,6 +218,12 @@ describe("scene paint on a real canvas", () => {
     let differ = 0
     for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
     expect(differ / (1920 * 1080)).toBeLessThan(0.002)
+    // A rule across the whole artboard reaches both edges (its box is cut to the artboard, not squashed).
+    const rule = { ...arrow, id: "rule", x1: 0, y1: 540, x2: 1920, y2: 540, arrowEnd: false, pathType: "straight", curveBulge: 0 }
+    const ruled = designToScene({ ...withPaths, scene: applyCommand(scene, { type: "ADD_NODE", node: rule as never }), bindings: { ...withPaths.bindings, rule: { id: "rule", kind: "color" as const } } })
+    const ruleOut = drawOutput(normalizeScene(ruled.scene)!, 1920, 1080)
+    expect(near(pixel(ruleOut, 4, 540), WHITE)).toBe(true)
+    expect(near(pixel(ruleOut, 1915, 540), WHITE)).toBe(true)
     // Reopened in the editor, they are a polygon and a line again, and save the same.
     const reopened = sceneToDesign(saved.scene)
     expect(Object.values(reopened.scene.nodes).map((n) => n.type).filter((t) => t === "polygon" || t === "line").sort()).toEqual(["line", "polygon"])

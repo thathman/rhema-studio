@@ -325,13 +325,16 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
     const textX = node.type === "text" ? anchorToCenter(node.x, node.originX, textWidth, true) - textWidth / 2 : 0
     // A line's box (#448): its ends, with room for its stroke and arrowheads on every side.
     const linePad = node.type === "line" ? Math.max(node.strokeWidth, Math.min(72, Math.max(5, Math.max(1, node.strokeWidth) * 2.25))) + Math.abs(node.pathType === "curved" ? node.curveBulge : 0) : 0
-    const size = node.type === "line"
+    const rawSize = node.type === "line"
       ? { x: Math.min(node.x1, node.x2) - linePad, y: Math.min(node.y1, node.y2) - linePad, w: Math.abs(node.x2 - node.x1) + 2 * linePad, h: Math.abs(node.y2 - node.y1) + 2 * linePad }
       : textBounds
       ? { w: textWidth, h: Math.max(textBounds.height, preservedTextHeight), x: textX, y: textBounds.y }
       : "width" in node && "height" in node
         ? { w: (node.width as number) * node.scaleX, h: (node.height as number) * node.scaleY, x: node.x, y: node.y }
         : { w: 0, h: 0, x: node.x, y: node.y }
+    // A line's or polygon's box is cut to the artboard (as every stored box is) and kept at least
+    // 1% each way; its path is stored relative to that box, so the cut never squashes it (#448).
+    const size = node.type === "line" || node.type === "polygon" ? artboardBox(rawSize) : rawSize
     const layer: SceneLayer = {
       ...layerBinding,
       name: node.name ?? node.id,
@@ -343,6 +346,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
     if (rotation !== undefined) layer.rotation = rotation
     delete layer.shadow
     delete layer.blur
+    // Set again below only for a polygon or line: never a stale path on a rectangle.
+    delete layer.vector
     if (!("issue" in effects) && EFFECT_KINDS.has(binding.kind)) {
       if (effects.shadow) layer.shadow = effects.shadow
       if (effects.blur) layer.blur = effects.blur
@@ -493,7 +498,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       else if (node.fill.type !== "solid" && node.fill.type !== "gradient") issues.push({ nodeId: node.id, message: "This polygon paint cannot be drawn on Rhema outputs" })
       else if ("issue" in edge) issues.push({ nodeId: node.id, message: edge.issue })
       else if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) issues.push({ nodeId: node.id, message: "Polygon clipping cannot be saved into a Rhema scene yet" })
-      else if (!(node.width > 0 && node.height > 0) || node.scaleX <= 0 || node.scaleY <= 0) issues.push({ nodeId: node.id, message: "A polygon must keep a positive size and scale for Rhema outputs" })
+      else if (!(node.width >= 0.01 && node.height >= 0.01) || node.scaleX <= 0 || node.scaleY <= 0) issues.push({ nodeId: node.id, message: "A polygon must keep a positive size and scale for Rhema outputs" })
       else {
         layer.color = gradient ? gradientFallback(gradient) : node.fill.type === "solid" ? node.fill.color : "#000000"
         if (gradient) layer.gradient = gradient
@@ -501,7 +506,10 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         if (edge.outline) layer.outline = edge.outline
         else delete layer.outline
         delete layer.corner
-        layer.vector = { type: "polygon", width: node.width, height: node.height, points: pts.map((p) => ({ x: round(p.x), y: round(p.y) })) }
+        // Points in artboard px around the stored box's centre (the node's own centre moved there).
+        const ncx = node.x + (node.width * node.scaleX) / 2, ncy = node.y + (node.height * node.scaleY) / 2
+        const bcx = size.x + size.w / 2, bcy = size.y + size.h / 2
+        layer.vector = { type: "polygon", width: round(size.w), height: round(size.h), points: pts.map((p) => ({ x: round(ncx + p.x * node.scaleX - bcx), y: round(ncy + p.y * node.scaleY - bcy) })) }
       }
     } else if (node.type === "line") {
       // A line or arrow (#448): its ends in its box, stroked as the editor strokes it (solid, round caps).
@@ -509,7 +517,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       if (binding.kind !== "color") issues.push({ nodeId: node.id, message: "A line needs a Rhema colour-layer binding" })
       else if (stroke.type !== "solid" || !TEXT_COLOR.test(stroke.color)) issues.push({ nodeId: node.id, message: "Line colours must be a solid #rrggbb for Rhema outputs" })
       else if (!(node.strokeWidth >= 0.5 && node.strokeWidth <= 200)) issues.push({ nodeId: node.id, message: "Lines must be 0.5–200 px wide for Rhema outputs" })
-      else if (![node.x1, node.y1, node.x2, node.y2, node.curveBulge, node.curveT].every(Number.isFinite)) issues.push({ nodeId: node.id, message: "This line cannot be drawn on Rhema outputs" })
+      else if (![node.x1, node.y1, node.x2, node.y2, node.curveBulge, node.curveT].every(Number.isFinite) || node.curveT < 0 || node.curveT > 1) issues.push({ nodeId: node.id, message: "This line cannot be drawn on Rhema outputs" })
       else {
         layer.color = stroke.color
         delete layer.gradient
@@ -745,4 +753,13 @@ function vectorNode(layer: SceneLayer, v: SceneVector, width: number, height: nu
     arrowStart: v.arrowStart, arrowEnd: v.arrowEnd, lineStyle: "solid", pathType: v.curveBulge ? "curved" : "straight", curveBulge: v.curveBulge, curveT: v.curveT,
   }
   return line
+}
+
+/** A box cut to the artboard and at least 1% of it each way (stored boxes are; see scenes.ts). */
+function artboardBox(b: { x: number; y: number; w: number; h: number }): { x: number; y: number; w: number; h: number } {
+  const minW = DESIGN_WIDTH / 100, minH = DESIGN_HEIGHT / 100
+  let x0 = Math.max(0, b.x), y0 = Math.max(0, b.y), x1 = Math.min(DESIGN_WIDTH, b.x + b.w), y1 = Math.min(DESIGN_HEIGHT, b.y + b.h)
+  if (x1 - x0 < minW) { const c = Math.min(DESIGN_WIDTH - minW / 2, Math.max(minW / 2, (x0 + x1) / 2)); x0 = c - minW / 2; x1 = c + minW / 2 }
+  if (y1 - y0 < minH) { const c = Math.min(DESIGN_HEIGHT - minH / 2, Math.max(minH / 2, (y0 + y1) / 2)); y0 = c - minH / 2; y1 = c + minH / 2 }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
