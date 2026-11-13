@@ -111,6 +111,39 @@ describe("Prepare → AI drafts", () => {
     expect(useQueueStore.getState().items.map((i) => i.reference).slice(0, 2)).toEqual(["Loop A", "Loop B"])
   })
 
+  it("adds a draft's items into one chosen event, as one undoable step; a gone event adds nothing", async () => {
+    drafts = [draft]
+    useSettingsStore.setState({ mcpEnabled: true })
+    const slide = (id: string) => ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 })
+    const headers = [
+      { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual" },
+      { id: "worship", type: "group", name: "Worship", at: 0, event: { schema_version: 1 } },
+      { id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1 } },
+    ] as never
+    useQueueStore.setState({ items: [slide("Hymn 1"), slide("Text")] as never, activeIndex: null, headers })
+    useQueueStore.getState().resetHistory()
+    await mount()
+    const pick = document.querySelector('select[aria-label="Add Thanksgiving Service into"]') as HTMLSelectElement
+    await act(async () => { pick.value = "worship"; pick.dispatchEvent(new Event("change", { bubbles: true })) })
+    await act(async () => button("Add to this event").click())
+    const q = useQueueStore.getState()
+    expect(q.items.map((i) => i.reference)).toEqual(["Hymn 1", "Welcome", "Missing hymn: Now Thank We All Our God", "Text"])
+    // No new phases or events: only the items, and the Sermon still starts at "Text".
+    expect(q.headers.map((h) => [h.name, h.at])).toEqual([["Main service", 0], ["Worship", 0], ["Sermon", 3]])
+    q.undo()
+    expect(useQueueStore.getState().items.map((i) => i.reference)).toEqual(["Hymn 1", "Text"])
+    // The chosen event removed before the press: nothing goes anywhere else.
+    expect(useQueueStore.getState().appendRundown([slide("Stray")] as never, [], "gone")).toBe(false)
+    await mount()
+    const again = document.querySelector('select[aria-label="Add Thanksgiving Service into"]') as HTMLSelectElement
+    await act(async () => { again.value = "sermon"; again.dispatchEvent(new Event("change", { bubbles: true })) })
+    await act(async () => { useQueueStore.setState({ headers: useQueueStore.getState().headers.filter((h) => h.id !== "sermon") }) })
+    // The choice falls back, and the button says what it will now do.
+    expect(again.value).toBe("")
+    expect(button("Add to this event")).toBeUndefined()
+    expect(button("Add to this service")).toBeTruthy()
+  })
+
   it("lets people untick items and groups, shows how it differs from the open service, and opens only what is ticked", async () => {
     drafts = [{ ...draft, phases: [{ name: "Main service", role: "main", rule: "manual", starts_at: "10:00", items: [
       { kind: "slide", status: "found", title: "Welcome", planned_minutes: 5 },
