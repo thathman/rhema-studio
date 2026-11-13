@@ -37,6 +37,13 @@ export type LookFont = (typeof LOOK_FONTS)[number]["id"] | "custom"
 export type LookSize = (typeof LOOK_SIZES)[number]["id"]
 export type LookRatio = (typeof LOOK_RATIOS)[number]["id"] | "custom"
 
+export type Bilingual = NonNullable<BroadcastTheme["layout"]["bilingual"]>
+export const BILINGUAL_LAYOUTS: ReadonlyArray<{ id: Bilingual; label: string }> = [
+  { id: "stacked", label: "One under the other" },
+  { id: "side-by-side", label: "Side by side" },
+  { id: "alternate", label: "Line by line (songs)" },
+]
+
 export interface Look {
   font: LookFont
   size: LookSize
@@ -46,6 +53,8 @@ export interface Look {
   ratio: LookRatio
   /** Space between the two languages of a bilingual slide, theme px. */
   languageGap: number
+  /** How a bilingual slide places its two languages (#446). */
+  bilingual: Bilingual
   background: string | null
   words: string
   accent: string
@@ -63,6 +72,7 @@ export function lookOf(t: BroadcastTheme): Look {
     margin: Math.round((t.layout.padding.left / t.resolution.width) * 100),
     ratio,
     languageGap: t.layout.languageGap ?? Math.round(t.verseText.fontSize * t.verseText.lineHeight),
+    bilingual: t.layout.bilingual ?? "stacked",
     background: t.background.type === "solid" ? t.background.color : null,
     words: t.verseText.color,
     accent: t.reference.color,
@@ -76,6 +86,7 @@ export type LookChange =
   | { margin: number }
   | { ratio: Exclude<LookRatio, "custom"> }
   | { languageGap: number }
+  | { bilingual: Bilingual }
   | { background: string }
   | { words: string }
   | { accent: string }
@@ -115,6 +126,7 @@ export function applyLook(t: BroadcastTheme, change: LookChange): BroadcastTheme
     return { ...t, resolution: { width: r.width, height: r.height } }
   }
   if ("languageGap" in change) return { ...t, layout: { ...t.layout, languageGap: Math.min(240, Math.max(0, Math.round(change.languageGap))) } }
+  if ("bilingual" in change) return { ...t, layout: { ...t.layout, bilingual: change.bilingual } }
   if ("background" in change) return { ...t, background: { ...t.background, type: "solid", color: change.background } }
   if ("words" in change) return { ...t, ...both({ color: change.words }) }
   return { ...t, reference: { ...t.reference, color: change.accent } }

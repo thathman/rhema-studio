@@ -833,48 +833,9 @@ function drawVerseText(
   const actualFontSize = scaledFontSize ?? vt.fontSize
   const lineHeightPx = actualFontSize * vt.lineHeight
 
-  if (verse.lines) {
-    const primaryStyle = theme.verseText
-    const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
-    const baseFontSize = scaledFontSize ?? primaryStyle.fontSize
-    const primaryScale = primaryStyle.fontSize > 0 ? baseFontSize / primaryStyle.fontSize : 1
-    let currentY = startY
-    const blocks: Array<[string[], VerseTextStyle]> = [[verse.lines, primaryStyle]]
-    if (verse.secondaryLines?.length) blocks.push([verse.secondaryLines, secondaryStyle])
-    for (const [b, [lines, lineStyle]] of blocks.entries()) {
-      if (b > 0) currentY += languageGapPx(theme, baseFontSize, primaryScale)
-      for (const text of lines) {
-        currentY += drawVerseText(ctx, theme, { reference: verse.reference, segments: [{ text }] }, textRectX, textRectWidth, currentY, lineStyle.fontSize * primaryScale, lineStyle)
-      }
-    }
-    return currentY - startY
-  }
-
-  if (verse.translationLines && verse.translationLines.length > 1) {
-    const primaryStyle = theme.verseText
-    const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
-    const baseFontSize = scaledFontSize ?? primaryStyle.fontSize
-    const primaryScale = primaryStyle.fontSize > 0
-      ? baseFontSize / primaryStyle.fontSize
-      : 1
-    let currentY = startY
-    for (const [index, text] of verse.translationLines.entries()) {
-      if (index > 0) currentY += languageGapPx(theme, baseFontSize, primaryScale)
-      const lineStyle = index === 0 ? primaryStyle : secondaryStyle
-      const lineFontSize = lineStyle.fontSize * primaryScale
-      currentY += drawVerseText(
-        ctx,
-        theme,
-        { reference: verse.reference, segments: [{ text }] },
-        textRectX,
-        textRectWidth,
-        currentY,
-        lineFontSize,
-        lineStyle
-      )
-    }
-    return currentY - startY
-  }
+  const languages = layOutLanguages(theme, verse, textRectX, textRectWidth, scaledFontSize, (text, lineStyle, fontSize, x, width, y) =>
+    drawVerseText(ctx, theme, { reference: verse.reference, segments: [{ text }] }, x, width, startY + y, fontSize, lineStyle))
+  if (languages) return languages.height
 
   ctx.save()
   ctx.textBaseline = "top"
@@ -983,6 +944,55 @@ function drawVerseText(
 export function languageGapPx(theme: BroadcastTheme, baseFontSize: number, primaryScale: number): number {
   const gap = theme.layout.languageGap
   return typeof gap === "number" && gap >= 0 ? gap * primaryScale : baseFontSize * theme.verseText.lineHeight
+}
+
+/**
+ * Song lines and bilingual verses (#446): each line, in its language's style, at its place for
+ * the theme's bilingual layout. `line` draws or measures one entry at (x, y from the top, width)
+ * and returns its height. Null for a plain verse (wrapped as one paragraph).
+ */
+export function layOutLanguages(
+  theme: BroadcastTheme,
+  verse: VerseRenderData,
+  x: number,
+  width: number,
+  fontSizeOverride: number | undefined,
+  line: (text: string, style: VerseTextStyle, fontSize: number, x: number, width: number, y: number) => number
+): { height: number; columns: number } | null {
+  const primary = theme.verseText
+  const secondary = theme.secondaryVerseText ?? primary
+  // A group is drawn without gaps inside it; the language gap goes between groups.
+  let groups: Array<Array<[string, VerseTextStyle]>>
+  if (verse.lines) {
+    groups = [verse.lines.map((t) => [t, primary] as [string, VerseTextStyle])]
+    if (verse.secondaryLines?.length) groups.push(verse.secondaryLines.map((t) => [t, secondary] as [string, VerseTextStyle]))
+  } else if (verse.translationLines && verse.translationLines.length > 1) {
+    groups = verse.translationLines.map((t, i) => [[t, i === 0 ? primary : secondary]])
+  } else return null
+  const baseFontSize = fontSizeOverride ?? primary.fontSize
+  const scale = primary.fontSize > 0 ? baseFontSize / primary.fontSize : 1
+  const gap = languageGapPx(theme, baseFontSize, scale)
+  const mode = groups.length > 1 ? theme.layout.bilingual ?? "stacked" : "stacked"
+  const run = (group: Array<[string, VerseTextStyle]>, gx: number, gw: number, y: number) => {
+    for (const [text, style] of group) y += line(text, style, style.fontSize * scale, gx, gw, y)
+    return y
+  }
+  if (mode === "side-by-side") {
+    const columnWidth = Math.max(1, (width - gap * (groups.length - 1)) / groups.length)
+    const height = Math.max(...groups.map((g, i) => run(g, x + i * (columnWidth + gap), columnWidth, 0)))
+    return { height, columns: groups.length }
+  }
+  if (mode === "alternate" && verse.lines) {
+    // Pair line i of each language; a language with fewer lines just ends sooner.
+    const [first, second] = groups
+    groups = Array.from({ length: Math.max(first.length, second.length) }, (_, i) => [first[i], second[i]].filter(Boolean))
+  }
+  let y = 0
+  for (const [i, group] of groups.entries()) {
+    if (i > 0) y += gap
+    y = run(group, x, width, y)
+  }
+  return { height: y, columns: 1 }
 }
 
 function buildScaledTheme(
@@ -1175,54 +1185,13 @@ export function measureVerseHeight(
   const effectiveFontSize = fontSizeOverride ?? vt.fontSize
   const lineHeightPx = effectiveFontSize * vt.lineHeight
 
-  if (verse.lines) {
-    // Lyrics: every entry is its own line; the second language follows after
-    // one blank line in the secondary style. Same scaling as dual verses.
-    const primaryStyle = theme.verseText
-    const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
-    const baseFontSize = fontSizeOverride ?? primaryStyle.fontSize
-    const primaryScale = primaryStyle.fontSize > 0 ? baseFontSize / primaryStyle.fontSize : 1
-    let height = 0
-    let maxLineWidth = 1
-    const blocks: Array<[string[], VerseTextStyle]> = [[verse.lines, primaryStyle]]
-    if (verse.secondaryLines?.length) blocks.push([verse.secondaryLines, secondaryStyle])
-    for (const [b, [lines, lineStyle]] of blocks.entries()) {
-      if (b > 0) height += languageGapPx(theme, baseFontSize, primaryScale)
-      for (const text of lines) {
-        const m = measureVerseHeight(_ctx, theme, { reference: verse.reference, segments: [{ text }] }, textRectWidth, lineStyle.fontSize * primaryScale, lineStyle)
-        height += m.height
-        maxLineWidth = Math.max(maxLineWidth, m.maxLineWidth)
-      }
-    }
-    return { height, maxLineWidth }
-  }
-
-  if (verse.translationLines && verse.translationLines.length > 1) {
-    const primaryStyle = theme.verseText
-    const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
-    const baseFontSize = fontSizeOverride ?? primaryStyle.fontSize
-    const primaryScale = primaryStyle.fontSize > 0
-      ? baseFontSize / primaryStyle.fontSize
-      : 1
-    let height = 0
-    let maxLineWidth = 1
-    for (const [index, text] of verse.translationLines.entries()) {
-      if (index > 0) height += languageGapPx(theme, baseFontSize, primaryScale)
-      const lineStyle = index === 0 ? primaryStyle : secondaryStyle
-      const lineFontSize = lineStyle.fontSize * primaryScale
-      const metrics = measureVerseHeight(
-        _ctx,
-        theme,
-        { reference: verse.reference, segments: [{ text }] },
-        textRectWidth,
-        lineFontSize,
-        lineStyle
-      )
-      height += metrics.height
-      maxLineWidth = Math.max(maxLineWidth, metrics.maxLineWidth)
-    }
-    return { height, maxLineWidth }
-  }
+  let widest = 1
+  const languages = layOutLanguages(theme, verse, 0, textRectWidth, fontSizeOverride, (text, lineStyle, fontSize, _x, width) => {
+    const m = measureVerseHeight(_ctx, theme, { reference: verse.reference, segments: [{ text }] }, width, fontSize, lineStyle)
+    widest = Math.max(widest, m.maxLineWidth)
+    return m.height
+  })
+  if (languages) return { height: languages.height, maxLineWidth: languages.columns > 1 ? textRectWidth : widest }
 
   const handle = prepareVerseInline(theme, verse, effectiveFontSize, vt)
   if (!handle) {

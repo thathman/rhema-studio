@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { parseColorOpacity, buildColorWithOpacity } from "@/lib/color-utils"
 import { listAllFonts } from "@/lib/fonts"
+import { BILINGUAL_LAYOUTS } from "@/lib/theme-look"
 import {
   Select,
   SelectContent,
@@ -515,6 +516,19 @@ export function VerseProperties() {
           Match the first language again
         </Button>
       )}
+
+      {/* Where the second language goes (#446): a theme setting, used by verses and songs */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-medium text-muted-foreground" htmlFor="bilingual-layout">Two languages</label>
+        <select
+          id="bilingual-layout"
+          className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"
+          value={draftTheme.layout.bilingual ?? "stacked"}
+          onChange={(e) => updateOne("layout.bilingual", e.target.value)}
+        >
+          {BILINGUAL_LAYOUTS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+        </select>
+      </div>
 
       {/* The gap between the two languages (a theme setting, used by verses and songs) */}
       <div className="flex flex-col gap-1.5">
