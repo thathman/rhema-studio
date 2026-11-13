@@ -12,7 +12,7 @@ export function Card({ title, kicker, children }: { title: string; kicker: strin
   return (
     <section aria-label={title} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 text-xs">
       <div>
-        <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{kicker}</p>
+        <p className="eyebrow">{kicker}</p>
         <h3 className="text-sm font-bold">{title}</h3>
       </div>
       {children}

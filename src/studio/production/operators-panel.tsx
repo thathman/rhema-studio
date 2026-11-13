@@ -392,7 +392,7 @@ export function JoinedDesk({ layout = "card", menu }: { layout?: "card" | "page"
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-topbar px-4 py-2.5">
         {menu}
         <div className="min-w-0">
-          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{`Joined ${live?.church || address}`} · {page.title}</p>
+          <p className="eyebrow">{`Joined ${live?.church || address}`} · {page.title}</p>
           <h1 className="truncate text-base font-bold tracking-tight">{live?.service?.title ?? "The main computer's service"}</h1>
         </div>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{statusRow}</div>

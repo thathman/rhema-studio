@@ -178,7 +178,7 @@ function CollectionDetail({ collection, onChanged, onUseItem }: { collection: Co
   }
   return (
     <>
-      <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Collection</p>
+      <p className="eyebrow">Collection</p>
       <h2 className="mt-1 text-base font-semibold">{collection.summary.name}</h2>
       <ul className="mt-3 flex flex-col gap-1" aria-label={`Items in ${collection.summary.name}`}>
         {collection.items.length === 0 && <li className="text-xs text-muted-foreground">Empty. Add songs, slides, pictures or designs below.</li>}

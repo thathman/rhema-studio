@@ -85,7 +85,7 @@ export function AutomaticReminders() {
   return (
     <section aria-label="Automatic Timekeeper reminders" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-[15px]">
       <div>
-        <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Private Comms · main computer clock</p>
+        <p className="eyebrow">Private Comms · main computer clock</p>
         <h2 className="mt-1 text-sm font-bold">Automatic reminders</h2>
         <p className="mt-1 text-xs text-muted-foreground">The main computer sends each selected reminder once as an event approaches. It pauses on Hold and never appears on a congregation screen or Stage display.</p>
       </div>

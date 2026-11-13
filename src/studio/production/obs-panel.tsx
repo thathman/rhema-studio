@@ -239,7 +239,7 @@ export function ObsPanel() {
       <section aria-label="OBS program" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 text-xs">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">OBS program · the online stream and recording</p>
+            <p className="eyebrow">OBS program · the online stream and recording</p>
             {/* The two programs by name (#215 G5.1), with OBS's own format once it has said. */}
             <h3 className="text-sm font-bold">{onlineProgramName(connected ? video : null)}</h3>
           </div>
@@ -298,7 +298,7 @@ export function ObsPanel() {
       <section aria-label="OBS scenes" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 text-xs">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">From OBS, in OBS's order</p>
+            <p className="eyebrow">From OBS, in OBS's order</p>
             <h3 className="text-sm font-bold">OBS scenes</h3>
           </div>
           <Button size="sm" variant="ghost" onClick={() => openProductionTab("programs")}>Rhema Studio's congregation scenes</Button>
@@ -342,14 +342,14 @@ export function ObsPanel() {
       {connected && (
         <>
           <section aria-label="OBS stream and recording" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 text-xs">
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">As OBS reports them</p>
+            <p className="eyebrow">As OBS reports them</p>
             <h3 className="text-sm font-bold">Stream and recording</h3>
             <ObsOutputs />
             <ObsRecordingControls />
             <p className="text-muted-foreground">Start and stop the stream in OBS itself. Bitrate is worked out from what OBS has sent since the last reading.</p>
           </section>
           <section aria-label="OBS inputs" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 text-xs">
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">From OBS, shown only</p>
+            <p className="eyebrow">From OBS, shown only</p>
             <h3 className="text-sm font-bold">OBS inputs and sound</h3>
             <ObsInputs />
           </section>

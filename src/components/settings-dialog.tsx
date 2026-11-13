@@ -1218,7 +1218,7 @@ export function SettingsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 px-8 pt-6 pb-4 max-[1200px]:px-5">
-        <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Control, without complexity</p>
+        <p className="eyebrow">Control, without complexity</p>
         <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Settings, precisely organised.</h1>
         <p className="mt-1 text-xs text-muted-foreground">Preferences apply at once. Your data stays on this computer unless you choose a shared church folder.</p>
       </header>
@@ -1251,7 +1251,7 @@ export function SettingsPage() {
           <p role="status" className={searching ? "px-3 pt-1 pb-2 text-xs text-muted-foreground" : "sr-only"}>
             {!searching ? "" : hits.length === 0 && elsewhere.length === 0 ? "Nothing in Settings matches." : hits.length === 0 ? "Not in Settings: it has its own page, below. Enter opens the first." : `${hits.length} ${hits.length === 1 ? "section matches" : "sections match"}${elsewhere.length ? `, and ${elsewhere.length} elsewhere in Rhema` : ""}. Enter opens the first.`}
           </p>
-          {!searching && <p className="px-4 pt-2.5 pb-2 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preferences</p>}
+          {!searching && <p className="px-4 pt-2.5 pb-2 eyebrow">Preferences</p>}
           {groups.map((g) => (
             <div key={g.title} className="mb-3">
               <p className="px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-muted-foreground">{g.title}</p>

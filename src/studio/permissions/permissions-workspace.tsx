@@ -125,7 +125,7 @@ export function PermissionsWorkspace() {
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Your church · main computer decisions</p>
+            <p className="eyebrow">Your church · main computer decisions</p>
             <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Permissions</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Review changes from joined desks and manage what paired devices can do. Only the main computer can approve or change access.</p>
           </div>
