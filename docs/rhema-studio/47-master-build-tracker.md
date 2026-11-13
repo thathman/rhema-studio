@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.5.2.1 · 13 Nov 2026 · main `8e72041d`**
+**Version 1.5.3.0 · 13 Nov 2026 · main `21c4a2df`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -140,5 +140,5 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Area | Status |
 | --- | --- |
 | Rhema Comms (full-duplex held PTT, notices) | MERGED (phases C1–C4: notices, action requests with Seen/Ready/Unable, host-hub voice with channels, private calls and priority ducking; `src/lib/voice.ts`, `/api/v1/voice`). Not yet run with three or more real speakers. |
-| Rhema Engage (congregation quiz) | MERGED in app (host control, quiz editor, on-screen follow #933); the internet quiz service is not deployed: owner decision. |
+| Rhema Engage (congregation quiz) | IN PROGRESS | In the app: host control, quiz editor, on-screen follow (#933). Internet quiz service deployed on the owner's approval, 13 Nov: `https://rhema-engage.airix-mediia.workers.dev` (Cloudflare Worker, 19/19 service tests). Home and join pages answer; room creation and room state refuse with 503 until the owner sets SESSION_SIGNING_KEY and the two Turnstile keys (ADMIN_KEY set). Then: a real room from Rhema Studio and phones on mobile data. |
 | MCP service-draft and design tools | MERGED in part: 16 service tools with revision checks, resources and prompts; design capabilities, list, read (`rhema_get_design`), validate, create-draft and revise-draft (`rhema_update_design_draft`) (#664); a service draft is accepted whole, item by item, added after the service, or into one chosen event (#934). |
