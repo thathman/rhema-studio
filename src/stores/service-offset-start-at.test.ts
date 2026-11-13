@@ -19,11 +19,18 @@ describe("running late until a time (#196)", () => {
     expect(useServiceOffset.getState().minutes).toBe(0)
   })
 
-  it("refuses a time that is not one, and keeps within the offset's limits", () => {
+  it("refuses a time that is not one, or beyond what the offset holds, changing nothing", () => {
     useServiceOffset.setState({ minutes: 0, by: null })
     expect(useServiceOffset.getState().startAt("ten forty", "10:00")).toBe(false)
+    expect(useServiceOffset.getState().startAt("11:30", "06:00")).toBe(false)
     expect(useServiceOffset.getState().minutes).toBe(0)
-    useServiceOffset.getState().startAt("23:59", "06:00")
-    expect(useServiceOffset.getState().minutes).toBe(240)
+  })
+
+  it("reads across midnight as the nearest day (a watch-night service)", () => {
+    useServiceOffset.setState({ minutes: 0, by: null })
+    useServiceOffset.getState().startAt("00:10", "23:30")
+    expect(useServiceOffset.getState().minutes).toBe(40)
+    useServiceOffset.getState().startAt("23:55", "00:15")
+    expect(useServiceOffset.getState().minutes).toBe(-20)
   })
 })

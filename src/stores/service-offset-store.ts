@@ -27,6 +27,7 @@ interface OffsetState {
    * Running late until a time (#196): the main service now starts at `at` ("HH:MM") instead of its
    * planned `planned`: the offset becomes the minutes between them (on the same day).
    */
+  /** False (and nothing changed) when `at` is not a time or is more than 2 hours early or 4 hours late. */
   startAt: (at: string, planned: string, by?: string) => boolean
 }
 
@@ -54,8 +55,13 @@ export const useServiceOffset = create<OffsetState>((set, get) => ({
     const m = (t: string) => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(t) ? Number(t.split(":")[0]) * 60 + Number(t.split(":")[1]) : null)
     const a = m(at), p = m(planned)
     if (a === null || p === null) return false
-    const delta = clamp(a - p) - get().minutes
-    if (delta !== 0) get().adjust(delta, by)
+    // The nearest day, as the engine reads a clock time: 23:30 planned, starting 00:10 is 40 late.
+    let d = a - p
+    if (d > 720) d -= 1440
+    else if (d < -720) d += 1440
+    // Beyond what the offset holds (−120 … +240): not set, rather than set to something else.
+    if (clamp(d) !== d) return false
+    if (d !== get().minutes) get().adjust(d - get().minutes, by)
     return true
   },
   reset: (by) => {
