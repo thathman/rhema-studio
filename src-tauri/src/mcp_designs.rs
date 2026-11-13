@@ -31,7 +31,7 @@ fn capabilities() -> Value {
         "fill": [ { "type": "solid", "color": "#rrggbb" }, { "type": "gradient", "angle": "degrees, -360–360 (0 bottom to top, 90 left to right)", "stops": "2–16 of { color: #rrggbb or #rrggbbaa, offset: 0–1, in order }" } ],
         "layers": {
             "text": { "common": common, "height": "box height px (default one line)", "text": format!("the words in the first service language, up to {} characters; \\n breaks a line", proposal::MAX_TEXT_CHARS), "textSecond": "the same words in the second service language (expected when the church has two)", "fontSize": "8–400, default 64", "fontFamily": "a font name (default Arial); the Brand Kit's fonts are in rhema_get_church_profile", "fontWeight": "\"400\"–\"900\", default \"600\"", "fontStyle": "normal or italic", "textAlign": "left, center (default) or right", "lineHeight": "0.5–3, default 1.2", "color": "#rrggbb, default #ffffff", "underline": "true or false" },
-            "rect": { "common": common, "height": "px", "fill": "a fill", "outline": "optional { color: #rrggbb, width: 0.5–200 px }, drawn centred on the edge", "corner": "optional rounded corners, 0–540 px" },
+            "rect": { "common": common, "height": "px", "fill": "a fill", "outline": "optional { color: #rrggbb, width: 0.5–200 px }, drawn centred on the edge", "corner": "optional rounded corners, 0–540 px (more than half the shorter side draws fully rounded)" },
             "ellipse": { "common": common, "height": "px", "fill": "a fill", "outline": "optional { color: #rrggbb, width: 0.5–200 px }, drawn centred on the edge" },
             "picture": { "common": common, "height": "px", "mediaId": "a picture's id from rhema_list_media; screens fill the box keeping its shape" },
         },

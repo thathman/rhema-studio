@@ -119,9 +119,7 @@ fn outline(ctx: &mut Ctx, o: &Map<String, Value>, path: &str) -> (Value, f64) {
                 ctx.err(&format!("{at}.color"), "an outline colour must be #rrggbb");
             }
             let width = num(ctx, line, &at, "width", 0.5, 200.0, None);
-            if let Some(extra) = line.keys().find(|k| *k != "color" && *k != "width") {
-                ctx.err(&format!("{at}.{extra}"), "an outline has only a color and a width");
-            }
+            refuse_unknown(ctx, line, &at, &["color", "width"], "an outline");
             color.map_or((Value::Null, 0.0), |c| (json!({ "type": "solid", "color": c }), width))
         }
         Some(_) => {

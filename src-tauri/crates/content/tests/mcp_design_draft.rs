@@ -225,7 +225,9 @@ fn edges() -> Value {
         { "title": emoji(40), "layers": [
             { "type": "text", "x": 0, "y": 0, "width": 1920, "height": 1080, "text": emoji(1000), "textSecond": emoji(1000), "fontFamily": "Noto Sans, Arial", "fontSize": 8, "lineHeight": 3 },
             { "type": "text", "x": 1919, "y": 1079, "width": 1, "height": 1, "text": "x", "textSecond": "y", "fontSize": 400, "lineHeight": 0.5, "fontWeight": "900", "fontStyle": "italic", "textAlign": "right", "underline": true },
-            { "type": "ellipse", "x": 0, "y": 0, "width": 1, "height": 1, "opacity": 0, "fill": { "type": "gradient", "angle": -45.5, "stops": [{ "color": "#ff0000", "offset": 0 }, { "color": "#00ff00", "offset": 1 }] } }
+            { "type": "ellipse", "x": 0, "y": 0, "width": 1, "height": 1, "opacity": 0, "fill": { "type": "gradient", "angle": -45.5, "stops": [{ "color": "#ff0000", "offset": 0 }, { "color": "#00ff00", "offset": 1 }] } },
+            { "type": "rect", "x": 10, "y": 10, "width": 100, "height": 100, "fill": { "type": "solid", "color": "#000000" }, "outline": { "color": "#ABCDEF", "width": 0.5 }, "corner": 540 },
+            { "type": "ellipse", "x": 200, "y": 10, "width": 100, "height": 100, "fill": { "type": "solid", "color": "#000000" }, "outline": { "color": "#ffffff", "width": 200 } }
         ] }
     ] })
 }
@@ -248,6 +250,15 @@ fn the_limits_at_their_edges_build_the_edges_golden_and_one_past_them_is_refused
     assert!(has(&e, "pages[0].title", "80 characters"), "{e:?}");
     assert!(has(&e, "pages[0].layers[0].text", "2000 characters"), "{e:?}");
     assert!(has(&e, "pages[0].layers[1].fontFamily", "font family"), "{e:?}");
+    // Outlines and corners one past their edges (#448).
+    let mut q = edges();
+    q["pages"][0]["layers"][3]["outline"]["width"] = json!(0.49);
+    q["pages"][0]["layers"][3]["corner"] = json!(540.01);
+    q["pages"][0]["layers"][4]["outline"]["width"] = json!(200.01);
+    let e = errors(&q);
+    for at in ["pages[0].layers[3].outline.width", "pages[0].layers[3].corner", "pages[0].layers[4].outline.width"] {
+        assert!(e.iter().any(|i| i.path == at), "{at} in {e:?}");
+    }
 }
 
 #[test]
