@@ -51,7 +51,7 @@ const LIVE_TOOLS: ReadonlyArray<readonly [ProductionTab, string, string]> = [
   ["obs", "OBS", "obs stream streaming scenes switch record recording websocket"],
   ["programs", "Scenes", "scenes program take layout congregation"],
   ["cameras", "Cameras", "cameras phone camera video feed"],
-  ["timekeeper", "Timekeeper", "timer timers clock countdown hold late service time"],
+  ["timekeeper", "Timer", "timer timers timekeeper clock countdown hold late service time"],
   ["operators", "Operators", "operators desks crew phones paired take back control"],
   ["screens", "Screens", "screens outputs on off feeds tvs"],
   ["health", "Show health", "health preflight check readiness ndi"],
