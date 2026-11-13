@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { CUE_ACTIONS } from "@/lib/cues"
+import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { dayAt, validTimeZone } from "@/lib/church-time"
 import { actingAs, useBroadcastStore } from "@/stores/broadcast-store"
 import { useHold } from "@/stores/hold-store"
@@ -58,26 +59,36 @@ export function checkTickerWindow(now = Date.now()): void {
   const w = useTickerWindow.getState()
   if (!w.armed) return
   const b = useBroadcastStore.getState()
-  // In rehearsal it waits, at either end (the real ticker comes back when rehearsal ends).
-  if (b.rehearsal) return
+  // In rehearsal it waits, at either end (the real ticker comes back when rehearsal ends); on a
+  // Hold the clock's moves wait too, as loops and timed moves do.
+  if (b.rehearsal || useHold.getState().hold) return
   if (now >= w.armed.untilAt) {
     // Only the ticker it took, still the same one (an operator's own is left on).
     if (w.mine !== null && b.ticker?.startedAt === w.mine) actingAs(actor(), () => void CUE_ACTIONS["ticker.stop"].run())
     const { from, until } = w.armed
     useTickerWindow.setState({ armed: null, mine: null, started: false })
-    log(`ticker window ${from}–${until} ${w.started ? "ended" : "passed without going on"}`)
+    log(`ticker window ${from}–${until} ${w.mine !== null ? "ended" : "passed without going on"}`)
     return
   }
-  // On a Hold the clock's moves wait, as loops and timed moves do.
-  if (now >= w.armed.fromAt && !w.started && !useHold.getState().hold) {
+  if (now >= w.armed.fromAt && !w.started) {
     useTickerWindow.setState({ started: true })
     // Already on (an operator took it): the window leaves it, and leaves it on at Until.
     if (b.ticker) return
     const by = actor()
-    void actingAs(by, () => CUE_ACTIONS["ticker.take"].run()).then(() => {
+    // The take itself, credited to the window (its look's backing is looked up first).
+    void lowerThirdBacking(b.tickerStyle).then((backing) => {
+      if (useBroadcastStore.getState().ticker || !useTickerWindow.getState().armed) return
+      actingAs(by, () => useBroadcastStore.getState().setTicker({ backing }))
       // The one that went on now is the window's (none, if the words were cleared meanwhile).
       const t = useBroadcastStore.getState().ticker
-      if (t && useTickerWindow.getState().armed) useTickerWindow.setState({ mine: t.startedAt })
-    })
+      if (t) useTickerWindow.setState({ mine: t.startedAt })
+    }).catch(() => {})
   }
 }
+
+// The window's ticker paused and resumed (its start moves) or given new words is still its own;
+// stopped and taken again, it is not.
+useBroadcastStore.subscribe((s, prev) => {
+  const mine = useTickerWindow.getState().mine
+  if (mine !== null && prev.ticker?.startedAt === mine && s.ticker && s.ticker !== prev.ticker) useTickerWindow.setState({ mine: s.ticker.startedAt })
+})
