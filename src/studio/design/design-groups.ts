@@ -31,6 +31,7 @@ export const DESIGN_GROUPS: readonly DesignGroup[] = [
     sections: [
       { id: "my-designs", label: "My Designs", hint: "Editable church designs, private drafts and immutable versions" },
       { id: "library", label: "Templates", hint: "Scene templates for private, editable designs" },
+      { id: "scenes", label: "Scenes", hint: "Arrange the layers of the scenes Live takes: camera, Bible, lyrics, graphics" },
       { id: "lower-thirds", label: "Lower thirds", hint: "Names, scripture and lyrics strips" },
       { id: "ticker", label: "News ticker", hint: "The crawl along the screen" },
       { id: "countdown", label: "Countdown", hint: "One big time that turns amber, then red, as time runs out" },

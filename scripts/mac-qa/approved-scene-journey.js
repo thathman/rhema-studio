@@ -202,9 +202,8 @@ async function runScenario() {
     const designVersion = await window.__TAURI_INTERNALS__.invoke("design_get_version", { id: designDocument.id, version: 1 })
     if (!designVersion?.document) throw new Error("The immutable Design version could not be reopened")
 
-    stage = "open Live production tools and save a separate output-scoped scene"
-    await clickButton("Live")
-    await clickButton("Toggle Live tools")
+    stage = "open Design → Scenes and save a separate output-scoped scene"
+    await clickButton("Design")
     await clickButton("Scenes")
     await clickButton("Full screen")
     const sceneNameInput = await waitFor(() => document.querySelector('input[aria-label="Scene name"]'), "scene name field")

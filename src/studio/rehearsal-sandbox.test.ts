@@ -21,7 +21,7 @@ import { SCENE_PRESETS, newScene } from "@/lib/scenes"
 import { resetTimerLogged } from "@/lib/timer-reset"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { outputsForScreens, tickerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
-import { ProductionWorkspace } from "@/studio/production/production-workspace"
+import { SceneComposer } from "@/studio/production/scene-composer"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, type BroadcastOutput } from "@/types"
 import { useJournalStore } from "@/stores/journal-store"
 import { useTimerStore } from "@/stores/timer-store"
@@ -108,7 +108,7 @@ describe("cue steps say what they touch (C04)", () => {
 })
 
 /**
- * Scenes in rehearsal (#246, C02): a Take from Live → Production tools → Scenes, the Present scenes strip or a
+ * Scenes in rehearsal (#246, C02): a Take from Design → Scenes, the Present scenes strip or a
  * joined Screens desk changes the rehearsal only. The real screens keep their scene through it and
  * have exactly it when rehearsal ends, Show this live included.
  */
@@ -174,13 +174,11 @@ describe("a scene taken in rehearsal never reaches the real screens", () => {
     expect(main().sceneId).toBeUndefined()
   })
 
-  it("Live → Production tools → Scenes stays an editor; the named Take lives on Program", async () => {
+  it("Design → Scenes stays an editor; the named Take lives on Program", async () => {
     const el = document.createElement("div")
     document.body.appendChild(el)
     const root = createRoot(el)
-    await act(async () => root.render(createElement(ProductionWorkspace)))
-    const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "Scenes") as HTMLButtonElement
-    await act(async () => tab.click())
+    await act(async () => root.render(createElement(SceneComposer)))
     const button = (text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.includes(text)) as HTMLButtonElement
     await act(async () => button("Camera with the Bible").click())
     expect(el.textContent).toContain("This editor is private. Save the scene, choose it in Live → Scenes, then use the named Take on Program.")

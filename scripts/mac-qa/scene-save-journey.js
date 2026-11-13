@@ -68,9 +68,8 @@ async function runScenario() {
   const qaStores = await waitFor(() => window.__rhemaQa?.(), "isolated QA stores")
   let stage = "open Live scene tools"
   try {
-    await clickButton("Live")
-    await clickButton("Toggle Live tools")
-    await waitFor(() => buttons().some((button) => button.getAttribute("role") === "tab" && normal(button.innerText) === "Scenes"), "Live production tool tabs")
+    // Scenes are arranged in Design → Scenes (UX audit slice 4); choosing and Take stay on Live.
+    await clickButton("Design")
     await clickButton("Scenes")
     await waitFor(() => document.querySelector('[aria-label="Scene preview"]'), "Scene Composer")
 
@@ -90,6 +89,7 @@ async function runScenario() {
     )
 
     stage = "choose the saved scene in the output's private scene preview"
+    await clickButton("Live")
     await chooseSceneForOutput("Full screen", output.name)
     const initialTakeLabel = `Take scene Full screen to ${output.name}`
     await waitFor(() => buttons().some((button) => button.getAttribute("aria-label") === initialTakeLabel && !button.disabled && button.getAttribute("aria-disabled") !== "true"), "ready named scene Take in Program")
@@ -111,6 +111,9 @@ async function runScenario() {
     if (!takenBeforeEdit || !frameBeforeEdit) throw new Error("Initial Take did not produce a visible scene revision")
 
     stage = "edit the scene draft"
+    await clickButton("Design")
+    await clickButton("Scenes")
+    await waitFor(() => document.querySelector('input[aria-label="Scene name"]')?.value === "Full screen", "the saved scene in Design → Scenes")
     await setInput('input[aria-label="Scene name"]', "QA Scene Draft")
     await setInput('input[aria-label="Background colour"]', "#123456")
     await waitFor(() => buttons().some((button) => normal(button.innerText) === "Save scene"), "Save scene action")
@@ -132,6 +135,8 @@ async function runScenario() {
     if (afterSave.isLive !== liveBeforeEdit) throw new Error("Saving the scene changed Live content state")
 
     stage = "Take the saved revision deliberately"
+    await clickButton("Live")
+    await chooseSceneForOutput("QA Scene Draft", output.name)
     const savedTakeLabel = `Take scene QA Scene Draft to ${output.name}`
     await waitFor(() => buttons().some((button) => button.getAttribute("aria-label") === savedTakeLabel && !button.disabled && button.getAttribute("aria-disabled") !== "true"), "ready Take for the saved scene revision")
     await clickButton(savedTakeLabel)

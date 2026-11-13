@@ -9,8 +9,6 @@ export const PRODUCTION_TABS: ReadonlyArray<readonly [ProductionTab, string]> = 
   ["timekeeper", "Timekeeper"],
   ["screens", "Screens"],
   ["health", "Show health"],
-  // Scenes (the id stays "programs", so saved links and other pages keep working).
-  ["programs", "Scenes"],
   ["obs", "OBS"],
   ["cameras", "Cameras"],
   ["operators", "Operators"],
@@ -56,6 +54,13 @@ export function setLiveToolsExpanded(tab: LiveToolsTab, value: boolean): void {
 }
 
 export function openProductionTab(tab: ProductionTab, opts: { sceneId?: string } = {}): void {
+  // Scenes ("programs") are arranged in Design → Scenes now (UX audit slice 4); old links land there, at the scene.
+  if (tab === "programs") {
+    useProductionTab.setState({ requested: null, scene: opts.sceneId ?? null })
+    useShellStore.getState().setDesignTab("scenes")
+    useShellStore.getState().goTo("design")
+    return
+  }
   useProductionTab.setState({ requested: tab, selected: tab, scene: opts.sceneId ?? null, open: true, liveToolsTab: "production", linked: true })
   useShellStore.getState().goTo("present")
 }

@@ -33,7 +33,7 @@ export const SCENES_REHEARSAL_NOTE = "Rehearsal: a Take here is practice. The sc
  * Scenes in Present (ADR 0001): choose a private arrangement for a congregation screen (camera and
  * Bible, lyrics on a picture…) without leaving the live console. Selection does not change the
  * screen; the named action on Program applies it. The words still come from the live sources.
- * Scenes are made and edited in Live → Production tools → Scenes. The operator can return to the
+ * Scenes are made and edited in Design → Scenes. The operator can return to the
  * screen's own feed and preview the last scene before the same named Take. Shown only when there
  * is a congregation screen and a saved scene.
  */

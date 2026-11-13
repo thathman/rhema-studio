@@ -1113,7 +1113,7 @@ export function ScenesDesk({ live, role, outputScope, groupTakeScope }: { live: 
             {edits && deskEditable(s) && <Button size="sm" variant="ghost" aria-label={cameraOnly ? `Change the cameras in ${s.name}` : `Edit ${s.name}`} disabled={!ok} onClick={() => { setSaid(""); setEditing(s.id) }}>{cameraOnly ? "Cameras…" : "Edit…"}</Button>}
           </li>
         ))}
-        {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet{edits && !cameraOnly ? "" : ": they are made on the main computer (Live → Production tools → Scenes)"}.</li>}
+        {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet{edits && !cameraOnly ? "" : ": they are made on the main computer (Design → Scenes)"}.</li>}
       </ul>
       <div className="flex flex-wrap gap-2">
         {takes && output?.sceneId && !groupMode && <Button size="sm" variant="ghost" title={releaseBlockReason ?? undefined} disabled={!ok || !!releaseBlockReason} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button>}
