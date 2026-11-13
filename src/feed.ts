@@ -113,7 +113,8 @@ function placeCameras() {
     for (const l of f.scene.layers) {
       const v = belowElement(l.id)
       if ((l.kind !== "camera" && l.kind !== "video") || !v || !shownBelow(l.id)) continue
-      Object.assign(v.style, { position: "absolute", objectFit: "cover", opacity: String(l.opacity), left: `${ox + (width * scale * l.box.x) / 100}px`, top: `${oy + (height * scale * l.box.y) / 100}px`, width: `${(width * scale * l.box.w) / 100}px`, height: `${(height * scale * l.box.h) / 100}px` })
+      // Turned as the frame turns its cut-out: about the box's centre (#448).
+      Object.assign(v.style, { position: "absolute", objectFit: "cover", opacity: String(l.opacity), transform: l.rotation ? `rotate(${l.rotation}deg)` : "", transformOrigin: "50% 50%", left: `${ox + (width * scale * l.box.x) / 100}px`, top: `${oy + (height * scale * l.box.y) / 100}px`, width: `${(width * scale * l.box.w) / 100}px`, height: `${(height * scale * l.box.h) / 100}px` })
       order.push(v)
       keep.add(v)
     }

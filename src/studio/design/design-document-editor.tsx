@@ -1498,7 +1498,7 @@ export function DesignDocumentEditor({
                   <NumberField label="Opacity %" min={0} max={100} value={selectedRenderable.opacity * 100} onCommit={(value) => dispatch({ type: "SET_NODE_OPACITY", id: selectedRenderable.id, opacity: value / 100 })} />
                   <NumberField label="Rotation °" min={-360} max={360} value={selectedRenderable.rotation} onCommit={(value) => updateNode({ ...selectedRenderable, rotation: value })} />
                 </div>
-                {layerRotation(selectedRenderable.rotation) !== undefined && selectedBinding && !layerTurns(selectedBinding.kind) && <p role="status" className="text-[0.6875rem] text-muted-foreground">Cameras, videos and tickers stay upright on outputs. Set Rotation back to 0 before using a version in Prepare.</p>}
+                {layerRotation(selectedRenderable.rotation) !== undefined && selectedBinding && !layerTurns(selectedBinding.kind) && <p role="status" className="text-[0.6875rem] text-muted-foreground">Tickers stay upright on outputs. Set Rotation back to 0 before using a version in Prepare.</p>}
                 {selectedRenderable.type === "image" && selectedBinding?.kind === "picture" && (
                   <section className="space-y-2 border-t border-border pt-3" aria-label="Picture appearance">
                     <div>
