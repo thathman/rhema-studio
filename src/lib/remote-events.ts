@@ -30,6 +30,7 @@ export const REMOTE_EVENTS = {
   event_prev: "remote:event_prev",
   event_start: "remote:event_start",
   event_offset: "remote:event_offset",
+  event_start_at: "remote:event_start_at",
   timer_start: "remote:timer_start",
   timer_pause: "remote:timer_pause",
   timer_adjust: "remote:timer_adjust",

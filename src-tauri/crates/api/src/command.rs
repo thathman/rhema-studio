@@ -33,6 +33,9 @@ pub enum RemoteCommand {
     /// Running late (+) or early (−), in minutes, added to the service's shared offset (#196).
     /// Only what is expected moves; the plan and the screens stay as they are.
     EventOffset(i32),
+    /// Running late until a time (#196): the main service now starts at this "HH:MM"; the main
+    /// computer sets the offset from its own planned start. Only before the service begins.
+    EventStartAt(String),
     /// The service timer, from a Timekeeper desk (#196 R5): start, pause, or correct it by whole
     /// minutes (at most 10 a step). Never a screen.
     TimerStart,
@@ -484,6 +487,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::EventPrev => write!(f, "event_prev"),
             RemoteCommand::EventStart(id) => write!(f, "event_start({id})"),
             RemoteCommand::EventOffset(m) => write!(f, "event_offset({m:+})"),
+            RemoteCommand::EventStartAt(t) => write!(f, "event_start_at({t})"),
             RemoteCommand::TimerStart => write!(f, "timer_start"),
             RemoteCommand::TimerPause => write!(f, "timer_pause"),
             RemoteCommand::TimerAdjust(m) => write!(f, "timer_adjust({m:+})"),
@@ -845,6 +849,7 @@ mod tests {
                 | RemoteCommand::EventPrev
                 | RemoteCommand::EventStart(_)
                 | RemoteCommand::EventOffset(_)
+                | RemoteCommand::EventStartAt(_)
                 | RemoteCommand::TimerStart
                 | RemoteCommand::TimerPause
                 | RemoteCommand::TimerAdjust(_)
@@ -892,6 +897,8 @@ mod tests {
         let off: RemoteCommand =
             serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();
         assert_eq!(off, RemoteCommand::EventOffset(-5));
+        let at: RemoteCommand = serde_json::from_str(r#"{"command":"event_start_at","value":"10:40"}"#).unwrap();
+        assert_eq!(at, RemoteCommand::EventStartAt("10:40".into()));
         let ch: RemoteCommand = serde_json::from_str(r#"{"command":"voice_channels","value":{"listen":["stage"],"talk":"to:Ade bible"}}"#).unwrap();
         assert!(matches!(ch, RemoteCommand::VoiceChannels(VoiceChannelsIn { ref talk, ref levels, .. }) if talk == "to:Ade bible" && levels.is_empty()), "levels are optional (older desks)");
         // Per-person levels (#251): percent by name; anything else in them refuses the command.

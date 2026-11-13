@@ -559,6 +559,7 @@ export function ViewerDesk({ live, stale, connected, now, receivedAt }: { live: 
 /** The event clock: Now, the run of show, Start / Back one, Hold / Resume (Timekeeper). `stale`: the host has not been heard from lately. */
 export function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const off = !useCanSend()
+  const [startAt, setStartAt] = useState("")
   const events = live.event.targets ?? live.rundown
   const current = events.find((r) => r.id === live.event.currentId)
   const at = current ? events.indexOf(current) : -1
@@ -578,6 +579,14 @@ export function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }
         <span className="flex-1" />
         <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "event_offset", value: -5 })}>−5 min</Button>
         <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "event_offset", value: 5 })}>+5 min</Button>
+        {/* "We'll start at 10:40" (#196): the main computer sets the lateness from its planned start, before the service begins. */}
+        {(live.timing?.state === "idle" || live.timing?.state === "held") && (
+          <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); if (startAt) void send({ command: "event_start_at", value: startAt }).then((r) => { if (r.ok) setStartAt("") }) }}>
+            <label className="text-muted-foreground" htmlFor="desk-start-at">Starts at</label>
+            <input id="desk-start-at" type="time" value={startAt} disabled={off} onChange={(e) => setStartAt(e.target.value)} className="h-7 rounded-md border border-input bg-card px-1.5" />
+            <Button size="sm" variant="outline" type="submit" disabled={off || !startAt}>Set</Button>
+          </form>
+        )}
         <Button size="sm" variant="outline" disabled={at <= 0 || off} onClick={() => void send({ command: "event_prev" })}>Back one</Button>
         <Button size="sm" disabled={!next || off} onClick={() => void send({ command: "event_next" })}>{next ? `Start ${next.reference}` : "Last event"}</Button>
       </div>

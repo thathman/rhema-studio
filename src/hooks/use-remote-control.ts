@@ -7,6 +7,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
 import { actingAs, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { runStateNow, timingInputNow } from "@/stores/timing-input"
 import { useServiceStore } from "@/stores/service-store"
 import { useSongStore } from "@/stores/song-store"
 import { useWorshipSetStore, type WorshipSetChange } from "@/stores/worship-set-store"
@@ -114,6 +115,18 @@ export function useRemoteControl() {
           const p = parsePayload(event.payload)
           if (typeof p?.minutes !== "number") return
           useServiceOffset.getState().adjust(p.minutes, typeof p.by === "string" ? p.by : undefined)
+        }),
+      )
+      // "Service starts at" from a joined Timekeeper desk (#196): the lateness from this computer's own
+      // planned start, only before the service begins; otherwise it says why here and changes nothing.
+      keep(
+        await listen<string>(REMOTE_EVENTS.event_start_at, (event) => {
+          if (cancelled) return
+          const p = parsePayload(event.payload)
+          if (typeof p?.at !== "string") return
+          const by = typeof p.by === "string" ? p.by : undefined
+          const why = startAtFromDesk(p.at, by)
+          if (why) toast.warning(`Service start ${p.at} not set`, { description: `${by ? `${by}: ` : ""}${why}` })
         }),
       )
       // The service timer from a Timekeeper desk (#196 R5), each in the log with who: starting and
@@ -540,3 +553,12 @@ export async function restartRemoteListeners(): Promise<void> {
   if (http) await start("start_http", httpPort, "Phone and HTTP remote control")
 }
 
+/** A desk's "Service starts at" (#196), as the Timekeeper's own form does it. Null when set, else why not. */
+export function startAtFromDesk(at: string, by?: string): string | null {
+  const headers = useQueueStore.getState().headers
+  const planned = (headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at
+  if (!planned) return "the plan has no start time for the main service"
+  const run = runStateNow()
+  if (!(run === "idle" || (run === "held" && timingInputNow().firstOnAir == null))) return "the service has begun: use ±5 min"
+  return useServiceOffset.getState().startAt(at, planned, by) ? null : `${at} is more than 2 hours early or 4 hours late for ${planned}`
+}
