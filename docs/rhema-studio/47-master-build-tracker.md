@@ -1,6 +1,6 @@
 # 47 — Master build tracker
 
-**Version 1.4.0.1 · 13 Nov 2026 · main `14a098b4`**
+**Version 1.5.0.0 · 13 Nov 2026 · main `766c636c`**
 
 This is where build status lives. [32 — feature coverage inventory](32-feature-coverage-inventory.md) stays the list of what the owner approved. This file records how far each area has got, with evidence. Update it in the same PR as the work it describes. Bump the version with every change: **B** for new rows or phases, **D** for status updates.
 
@@ -116,6 +116,8 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | An item's own countdown timer (#196) | MERGED | #927 (13 Nov): Prepare → Timing → Countdown display: counts down, up, or no timer, for displays counting "the item on now". |
 | Ticker on a clock window (#187) | MERGED | #929 (13 Nov, lead decision under the owner's standing instruction): armed in Live, on at From and off at Until; waits in rehearsal and on a Hold; stops only the ticker it took; not kept over a restart. |
 | Fixed starts kept by the clock (#196) | MERGED | #930 (13 Nov, ADR 25 §8.9): armed by the Timekeeper, the next fixed-start event begins on the event clock at its time; only in "I start each event", never late or out of order; screens never change. |
+| Engage quiz on Rhema's screens (#425 stage 2) | MERGED | #933 (13 Nov): Show on Rhema's screens puts the quiz on Live as a quick screen and follows the game (join link and code, each question, the answer only at reveal); Back or Take off returns what was on; it stops following on Clear or anything else going up. Scores (nicknames typed on the internet) wait for Show scores. Tested with a mocked service only; the quiz service itself still awaits the owner's deployment decision. |
+| AI draft into a chosen event (#252) | MERGED | #934 (13 Nov): Prepare → AI drafts → Add, as new phases at the end or into one of the open service's events (items at its end, one Undo); an event gone since it was chosen adds nothing. |
 | Backup and restore safety | MERGED | #786 (refuses backups from newer versions; restore blocked while on air). |
 
 ### Phase E — Supervised church rehearsal
@@ -135,5 +137,5 @@ An open PR, a spec or a screenshot alone is never MERGED or ACCEPTED (doc 32, re
 | Area | Status |
 | --- | --- |
 | Rhema Comms (full-duplex held PTT, notices) | MERGED (phases C1–C4: notices, action requests with Seen/Ready/Unable, host-hub voice with channels, private calls and priority ducking; `src/lib/voice.ts`, `/api/v1/voice`). Not yet run with three or more real speakers. |
-| Rhema Engage (congregation quiz) | DEFERRED |
-| MCP service-draft and design tools | MERGED in part: 16 service tools with revision checks, resources and prompts; design capabilities, list, validate and create-draft (#664). Not yet: reading or revising a design draft, accepting a service draft per event. |
+| Rhema Engage (congregation quiz) | MERGED in app (host control, quiz editor, on-screen follow #933); the internet quiz service is not deployed: owner decision. |
+| MCP service-draft and design tools | MERGED in part: 16 service tools with revision checks, resources and prompts; design capabilities, list, read (`rhema_get_design`), validate, create-draft and revise-draft (`rhema_update_design_draft`) (#664); a service draft is accepted whole, item by item, added after the service, or into one chosen event (#934). |
