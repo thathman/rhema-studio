@@ -384,7 +384,8 @@ export function LibraryWorkspace() {
     : null
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    // A short window scrolls the page rather than crushing a section's list (#385: Slides' list was 16 px tall at 1024×700).
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 px-[29px] pt-[26px] pb-4 max-[1200px]:px-5">
         <div className="min-w-0">
           <h1 className="text-2xl leading-tight font-semibold tracking-tight">Library</h1>
@@ -453,7 +454,7 @@ export function LibraryWorkspace() {
           </button>
         ))}
       </div>
-      <div role="tabpanel" aria-label={SECTIONS.find(([id]) => id === section)?.[1]} className="mx-[29px] mb-6 flex min-h-0 flex-1 flex-col max-[1200px]:mx-5">
+      <div role="tabpanel" aria-label={SECTIONS.find(([id]) => id === section)?.[1]} className="mx-[29px] mb-6 flex min-h-[24rem] flex-1 flex-col max-[1200px]:mx-5">
         {section === "bible" && <BibleLibrary onUseItem={useItem} />}
         {section === "songs" && <SongLibrary layout="cards" newRequest={newSong} onUseItem={useItem} privatePreview />}
         {section === "designs" && <div className="min-h-0 flex-1 overflow-y-auto">
