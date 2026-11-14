@@ -513,6 +513,9 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       // A polygon or star (#448): its points, filled and outlined as a rectangle is.
       const gradient = node.fill.type === "gradient" ? normalizeGradient(node.fill) : undefined
       const edge = shapeOutline(node, false)
+      // Clipped in the editor (#448): its clips in its own (unscaled) size, as a picture's are.
+      const polyClips = [...(node.clipPathStack ?? []), ...(node.clipPath ? [node.clipPath] : [])]
+      const polyClip = polyClips.length ? normalizeShapeClip({ width: node.width, height: node.height, clips: polyClips }) : undefined
       const pts = node.points
       const pointsOk = Array.isArray(pts) && pts.length >= 3 && pts.length <= 64 && pts.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
       if (binding.kind !== "color") issues.push({ nodeId: node.id, message: "A polygon needs a Rhema colour-layer binding" })
@@ -521,7 +524,7 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       else if (node.fill.type === "solid" && !TEXT_COLOR.test(node.fill.color)) issues.push({ nodeId: node.id, message: "Polygon colours must be #rrggbb hex for Rhema scene output" })
       else if (node.fill.type !== "solid" && node.fill.type !== "gradient") issues.push({ nodeId: node.id, message: "This polygon paint cannot be drawn on Rhema outputs" })
       else if ("issue" in edge) issues.push({ nodeId: node.id, message: edge.issue })
-      else if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) issues.push({ nodeId: node.id, message: "Polygon clipping cannot be saved into a Rhema scene yet" })
+      else if (polyClips.length && !polyClip) issues.push({ nodeId: node.id, message: `This polygon's clipping cannot be drawn on Rhema outputs: ${shapeClipIssue({ width: node.width, height: node.height, clips: polyClips })}` })
       else if (!(node.width >= 0.01 && node.height >= 0.01) || node.scaleX <= 0 || node.scaleY <= 0) issues.push({ nodeId: node.id, message: "A polygon must keep a positive size and scale for Rhema outputs" })
       // Off the page and turned or graded: outputs would turn or grade it about the part on the
       // page, not about the whole shape as the editor does.
@@ -532,6 +535,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         else delete layer.gradient
         if (edge.outline) layer.outline = edge.outline
         else delete layer.outline
+        if (polyClip) layer.shapeClip = polyClip
+        else delete layer.shapeClip
         delete layer.corner
         // Points in artboard px around the stored box's centre (the node's own centre moved there).
         const ncx = node.x + (node.width * node.scaleX) / 2, ncy = node.y + (node.height * node.scaleY) / 2
@@ -769,6 +774,7 @@ function vectorNode(layer: SceneLayer, v: SceneVector, width: number, height: nu
       fill: layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: layer.color ?? "#000000" },
       stroke: layer.outline ? { type: "solid", color: layer.outline.color } : null,
       strokeWidth: layer.outline ? layer.outline.width / (width / v.width) : 0,
+      ...(layer.shapeClip ? (() => { const c = scaledClips(layer.shapeClip, v.width, v.height); return { clipPath: c.at(-1) ?? null, ...(c.length > 1 ? { clipPathStack: c.slice(0, -1) } : {}) } })() : {}),
     }
     return polygon
   }

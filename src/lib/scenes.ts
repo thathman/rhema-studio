@@ -276,7 +276,7 @@ export function normalizeScene(raw: unknown): Scene | null {
     // A picture drawing Rhema cannot draw is dropped and the picture covers its box, as before.
     const imageDraw = l.kind === "picture" ? normalizeImageDraw(l.imageDraw) : undefined
     // Clips the editor gave a rectangle or ellipse (#448); clips Rhema cannot draw are dropped, the shape drawn whole.
-    const shapeClip = (l.kind === "color" && !l.vector) || l.kind === "ellipse" ? normalizeShapeClip(l.shapeClip) : undefined
+    const shapeClip = (l.kind === "color" && (!l.vector || l.vector.type === "polygon")) || l.kind === "ellipse" ? normalizeShapeClip(l.shapeClip) : undefined
     // Upright stays absent; a kind outputs cannot turn (a camera, video or ticker) stays upright.
     const rotation = layerTurns(l.kind) ? layerRotation(l.rotation) : undefined
     return [{ ...l, rotation, ...staticText, ...(ellipseColor ? { color: ellipseColor } : {}), gradient, outline, corner, vector, shapeClip, ...effects, imageDraw, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]

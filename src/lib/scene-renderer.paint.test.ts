@@ -117,6 +117,33 @@ describe("scene paint on a real canvas", () => {
     expect(stored.layers.map((l) => !!l.shapeClip)).toEqual([true, true, false])
   })
 
+  it("clips a star as the Avnac editor does, and keeps the clip through save and reopen (#448)", async () => {
+    const empty: Scene = { ...painted, id: "clip-star", backgroundGradient: undefined, background: "#0b1a3a", layers: [] }
+    const design = sceneToDesign(empty)
+    const star = { id: "star", parentId: design.scene.root, name: "Star", visible: true, x: 300, y: 200, rotation: 0, scaleX: 1, scaleY: 1, opacity: 1, originX: "left", originY: "top", type: "polygon", width: 400, height: 400,
+      points: Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + (i * Math.PI) / 5, rad = i % 2 ? 80 : 200; return { x: Math.round(rad * Math.cos(a)), y: Math.round(rad * Math.sin(a)) } }),
+      fill: { type: "solid", color: "#d14c62" }, stroke: null, strokeWidth: 0,
+      clipPath: { type: "rect", x: -100, y: 0, width: 200, height: 400, radiusX: 0, radiusY: 0 } }
+    const scene = applyCommand(design.scene, { type: "ADD_NODE", node: star as never })
+    const saved = designToScene({ ...design, scene, bindings: { ...design.bindings, star: { id: "star", kind: "color" as const } } })
+    expect(saved.issues).toEqual([])
+    expect(saved.scene.layers[0]).toMatchObject({ vector: { type: "polygon" }, shapeClip: { width: 400, height: 400 } })
+    const editor = createCanvas(1920, 1080)
+    await canvas2DRendererBackend.render(ctxOf(editor), buildRenderCommands(scene))
+    const output = drawOutput(saved.scene, 1920, 1080)
+    const a = ctxOf(editor).getImageData(0, 0, 1920, 1080).data
+    const b = ctxOf(output).getImageData(0, 0, 1920, 1080).data
+    let differ = 0
+    for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
+    expect(differ / (1920 * 1080)).toBeLessThan(0.001)
+    // Inside the clip the star is drawn; its right half, outside the clip, is the background (here as in the editor).
+    expect(near(pixel(output, 400, 400), ROSE)).toBe(true)
+    expect(near(pixel(output, 600, 400), NAVY)).toBe(true)
+    expect(near(pixel(editor, 600, 400), NAVY)).toBe(true)
+    // Reopened, the editor gets the clip back.
+    expect(sceneToDesign(saved.scene).scene.nodes.star).toMatchObject({ clipPath: { type: "rect", x: -100, width: 200 } })
+  })
+
   it("a faded group of layers apart draws as the editor fades it (#448)", async () => {
     const apart: Scene = { ...painted, id: "apart", backgroundGradient: undefined, layers: [
       layer("left", "color", { color: "#3157a4", box: { x: 5, y: 10, w: 35, h: 60 } }),
