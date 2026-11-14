@@ -436,7 +436,7 @@ export function RecorderDock() {
 
   return (
     <section
-      className="relative flex min-h-8 min-w-0 max-w-full flex-wrap items-center rounded-2xl border border-border bg-card px-3 py-0.5"
+      className="flex min-h-8 min-w-0 max-w-full flex-wrap items-center rounded-2xl border border-border bg-card px-3 py-0.5"
       aria-label="Rhema recording dock"
     >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
@@ -511,8 +511,10 @@ export function RecorderDock() {
               Hide recording controls
             </span>
           </summary>
-          {/* Opens under the pill like a popover; a native <details>, so the controls stay in the page (and keyboard order) while closed. */}
-          <div className="absolute top-full right-0 z-40 mt-2 grid w-[min(56rem,calc(100vw-2rem))] gap-3 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(14rem,1fr)_auto] lg:items-end">
+          {/* Opens under Live's status row like a popover, inside its margins: anchored to the row, not the pill,
+              so it never runs off the window wherever the pill wraps to. A native <details>, so the controls
+              stay in the page (and keyboard order) while closed. */}
+          <div data-recorder-panel className="absolute top-full left-4 z-40 mt-1 grid w-[min(56rem,calc(100%-2rem))] gap-3 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(14rem,1fr)_auto] lg:items-end">
             <label className="grid gap-1 text-xs font-medium">
               Congregation screen
               <select
