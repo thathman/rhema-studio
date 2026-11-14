@@ -14,7 +14,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 const COUNTS: ReadonlyArray<readonly [CountdownCounts, string]> = [
   ["timer", "The service timer (Present)"],
   ["item", "The item on now (its planned minutes)"],
-  ["aux", "An extra timer (Live → Production tools → Timekeeper)"],
+  ["aux", "An extra timer (Live → Live tools → Timer)"],
   ["until", "Time until a time of day"],
   ["start", "Time until the service starts (run of show)"],
   ["itemStart", "Time until an item starts (run of show)"],
@@ -150,7 +150,7 @@ export function CountdownDesigner() {
               A sample stage message
             </label>
           </div>
-          <p className="text-xs text-muted-foreground">To show it, set a stage output to Countdown (Live → Production tools → Screens → the output → Who sees it: Stage), or add the ready-made feed “Rhema Countdown” for a TV, OBS or NDI. A confidence monitor is the same: an output that shows this.</p>
+          <p className="text-xs text-muted-foreground">To show it, set a stage output to Countdown (Live → Live tools → Screens → the output → Who sees it: Stage), or add the ready-made feed “Rhema Countdown” for a TV, OBS or NDI. A confidence monitor is the same: an output that shows this.</p>
         </div>
 
         <div className="flex min-w-0 flex-col gap-3">

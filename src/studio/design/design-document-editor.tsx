@@ -1368,11 +1368,11 @@ export function DesignDocumentEditor({
               </div>
               {!cameraRouterReady ? (
                 <p role="status" className="mt-3 rounded border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-                  Camera selection needs a running Rhema camera router with a LAN address. Start or connect it in Live → Production tools → Cameras.
+                  Camera selection needs a running Rhema camera router with a LAN address. Start or connect it in Live → Live tools → Cameras.
                 </p>
               ) : cameras.length === 0 ? (
                 <p role="status" className="mt-3 rounded border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-                  No cameras are configured. Add a camera in Live → Production tools → Cameras, then return here.
+                  No cameras are configured. Add a camera in Live → Live tools → Cameras, then return here.
                 </p>
               ) : (
                 <ul className="mt-3 flex flex-wrap gap-2">
@@ -1681,7 +1681,7 @@ export function DesignDocumentEditor({
                       </select>
                     </label>
                     {!cameraRouterReady && <p role="status" className="text-[0.6875rem] text-muted-foreground">Connect a running Rhema camera router with a LAN address to change this source. The saved design stays unchanged.</p>}
-                    {cameraRouterReady && cameras.length === 0 && <p role="status" className="text-[0.6875rem] text-muted-foreground">No configured cameras are available. Add one in Live → Production tools → Cameras.</p>}
+                    {cameraRouterReady && cameras.length === 0 && <p role="status" className="text-[0.6875rem] text-muted-foreground">No configured cameras are available. Add one in Live → Live tools → Cameras.</p>}
                     <p className="text-[0.6875rem] text-muted-foreground">The canvas shows a placeholder and does not display live camera video. The draft stores the camera stream address; camera page secrets remain in Settings and are not copied into this design.</p>
                   </section>
                 )}

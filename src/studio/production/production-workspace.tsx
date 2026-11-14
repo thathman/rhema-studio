@@ -806,7 +806,7 @@ function CamerasHealth() {
   return (
     <Card kicker="Signal" title="Cameras" badge={ours.length > 0 && <Badge tone={sending === ours.length ? "ok" : "warn"}>{sending} of {ours.length} sending</Badge>}>
       {cams.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No cameras yet. Add a phone or camera for each angle in Live → Production tools → Cameras.</p>
+        <p className="text-xs text-muted-foreground">No cameras yet. Add a phone or camera for each angle in Live → Live tools → Cameras.</p>
       ) : (
         <ul aria-label="Camera signals" className="flex flex-col divide-y divide-border">
           {cams.map((c) => {
