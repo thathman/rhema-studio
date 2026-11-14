@@ -93,6 +93,30 @@ describe("scene paint on a real canvas", () => {
     expect(near(pixel(small, 1280 * 0.3, edgeY + 6), BLUE)).toBe(true)
   })
 
+  it("clips rectangles and ellipses as the Avnac editor does (#448)", async () => {
+    // Card: 768×540 px, clipped to a rounded rectangle on its left half. Ring: 480×432 px, clipped to a circle.
+    const clipped: Scene = {
+      ...painted, id: "clipped", backgroundGradient: undefined, background: "#0b1a3a",
+      layers: [
+        layer("card", "color", { color: "#3157a4", box: { x: 10, y: 10, w: 40, h: 50 }, shapeClip: { width: 768, height: 540, clips: [{ type: "rect", x: -192, y: 0, width: 384, height: 540, radiusX: 40, radiusY: 40 }] } }),
+        layer("ring", "ellipse", { color: "#d14c62", box: { x: 60, y: 20, w: 25, h: 40 }, shapeClip: { width: 480, height: 432, clips: [{ type: "ellipse", x: 0, y: 0, width: 300, height: 300 }] } }),
+      ],
+    }
+    const [editor, output] = [await drawEditor(clipped), drawOutput(clipped, 1920, 1080)]
+    const a = ctxOf(editor).getImageData(0, 0, 1920, 1080).data
+    const b = ctxOf(output).getImageData(0, 0, 1920, 1080).data
+    let differ = 0
+    for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i]! - b[i]!), Math.abs(a[i + 1]! - b[i + 1]!), Math.abs(a[i + 2]! - b[i + 2]!), Math.abs(a[i + 3]! - b[i + 3]!)) > 4) differ++
+    expect(differ / (1920 * 1080)).toBeLessThan(0.001)
+    // The card's right part is clipped away (the background shows); the ring's corners too.
+    const card = { x: 192, y: 108, w: 768, h: 540 }
+    expect(near(pixel(output, card.x + card.w * 0.9, card.y + card.h / 2), NAVY)).toBe(true)
+    expect(near(pixel(output, card.x + card.w * 0.25, card.y + card.h / 2), BLUE)).toBe(true)
+    // A stored scene keeps good clips and drops ones it cannot draw.
+    const stored = normalizeScene({ ...clipped, layers: [...clipped.layers, layer("bad", "color", { shapeClip: { width: 0, height: 10, clips: [] } as never })] })!
+    expect(stored.layers.map((l) => !!l.shapeClip)).toEqual([true, true, false])
+  })
+
   it("a faded group of layers apart draws as the editor fades it (#448)", async () => {
     const apart: Scene = { ...painted, id: "apart", backgroundGradient: undefined, layers: [
       layer("left", "color", { color: "#3157a4", box: { x: 5, y: 10, w: 35, h: 60 } }),

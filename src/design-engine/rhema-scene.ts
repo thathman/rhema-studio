@@ -19,9 +19,9 @@ import {
   type SaraswatiTextNode,
 } from "../vendor/avnac/saraswati"
 import { anchorToCenter } from "../vendor/avnac/saraswati/transform/anchor"
-import type { CountdownTo, DesignPin, Scene, SceneCrop, SceneGradient, SceneLayer, SceneShadow, SceneVector } from "../types/scene"
+import type { CountdownTo, DesignPin, Scene, SceneClip, SceneCrop, SceneGradient, SceneLayer, SceneShadow, SceneVector, ShapeClip } from "../types/scene"
 import { gradientCss, gradientFallback, gradientIssue, normalizeGradient } from "../lib/scene-gradient"
-import { imageDrawIssue, normalizeImageDraw } from "../lib/scene-image"
+import { imageDrawIssue, normalizeImageDraw, normalizeShapeClip, shapeClipIssue } from "../lib/scene-image"
 import { layerRotation, layerTurns } from "../lib/scene-rotation"
 
 /** The editing frame: a 1920×1080 artboard; layer boxes are kept in % of it, as Rhema keeps them. */
@@ -132,11 +132,15 @@ function toNode(layer: SceneLayer): SaraswatiNode {
     }
     return image
   }
+  // Clips a rectangle or ellipse was saved with (#448), back in the editor at the shape's present size.
+  const shapeClips = (layer.kind === "ellipse" || (layer.kind === "color" && !layer.vector)) && layer.shapeClip ? scaledClips(layer.shapeClip, width, height) : []
+  const clipFields = shapeClips.length ? { clipPath: shapeClips.at(-1) ?? null, ...(shapeClips.length > 1 ? { clipPathStack: shapeClips.slice(0, -1) } : {}) } : {}
   if (layer.kind === "ellipse") {
     const ellipse: SaraswatiEllipseNode = {
       ...basePaint(layer), type: "ellipse", width, height,
       fill: layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: layer.color && TEXT_COLOR.test(layer.color) ? layer.color : "#3157a4" },
       stroke: layer.outline ? { type: "solid", color: layer.outline.color } : null, strokeWidth: layer.outline?.width ?? 0,
+      ...clipFields,
     }
     return ellipse
   }
@@ -146,8 +150,17 @@ function toNode(layer: SceneLayer): SaraswatiNode {
     ...basePaint(layer), type: "rect", width, height, fill: layer.kind === "color" && layer.gradient ? gradientPaint(layer.gradient) : { type: "solid", color: fill },
     stroke: layer.kind === "color" && layer.outline ? { type: "solid", color: layer.outline.color } : null, strokeWidth: layer.kind === "color" ? layer.outline?.width ?? 0 : 0,
     radiusX: layer.kind === "color" ? layer.corner ?? 0 : 0, radiusY: layer.kind === "color" ? layer.corner ?? 0 : 0,
+    ...clipFields,
   }
   return rect
+}
+
+/** A shape's saved clips scaled from the size it was saved at to its present size. */
+function scaledClips(sc: ShapeClip, width: number, height: number): SceneClip[] {
+  const sx = width / sc.width, sy = height / sc.height
+  return sc.clips.map((c) => (c.type === "ellipse"
+    ? { type: "ellipse", x: c.x * sx, y: c.y * sy, width: c.width * sx, height: c.height * sy }
+    : { type: "rect", x: c.x * sx, y: c.y * sy, width: c.width * sx, height: c.height * sy, radiusX: c.radiusX * sx, radiusY: c.radiusY * sy }))
 }
 
 /** Open a Rhema scene in the engine. */
@@ -445,9 +458,16 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
           issues.push({ nodeId: node.id, message: "Edited fills on this live layer cannot be saved into a Rhema scene yet" })
         }
       }
-      if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) {
-        issues.push({ nodeId: node.id, message: "Layer clipping cannot be saved into a Rhema scene yet" })
-      }
+      const rectClips = [...(node.clipPathStack ?? []), ...(node.clipPath ? [node.clipPath] : [])]
+      if (rectClips.length > 0 && binding.kind !== "color") {
+        issues.push({ nodeId: node.id, message: "Clipping on this live layer cannot be saved into a Rhema scene yet" })
+      } else if (rectClips.length > 0) {
+        // Clipped as the editor clips it (#448): its clips in its own size, drawn the same on every output.
+        const raw = { width: node.width, height: node.height, clips: rectClips }
+        const clip = normalizeShapeClip(raw)
+        if (!clip) issues.push({ nodeId: node.id, message: `This shape's clipping cannot be drawn on Rhema outputs: ${shapeClipIssue(raw)}` })
+        else layer.shapeClip = clip
+      } else delete layer.shapeClip
       const shapeEdge = binding.kind === "color" ? shapeOutline(node, true) : null
       if (binding.kind !== "color" && (node.stroke || node.strokeWidth !== 0 || node.radiusX !== 0 || node.radiusY !== 0)) {
         issues.push({ nodeId: node.id, message: "Outlines and rounded corners on this live layer cannot be saved into a Rhema scene yet" })
@@ -470,7 +490,9 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
       if (node.fill.type === "gradient" && !gradient) refuse(`This ellipse gradient cannot be drawn on Rhema outputs: ${gradientIssue(node.fill)}`)
       else if (node.fill.type === "solid" && !TEXT_COLOR.test(node.fill.color)) refuse("Ellipse colours must be #rrggbb hex for Rhema scene output")
       else if (node.fill.type !== "solid" && node.fill.type !== "gradient") refuse("This ellipse paint cannot be drawn on Rhema outputs")
-      if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) refuse("Ellipse clipping cannot be saved into a Rhema scene yet")
+      const ellipseClips = [...(node.clipPathStack ?? []), ...(node.clipPath ? [node.clipPath] : [])]
+      const ellipseClip = ellipseClips.length ? normalizeShapeClip({ width: node.width, height: node.height, clips: ellipseClips }) : undefined
+      if (ellipseClips.length && !ellipseClip) refuse(`This ellipse's clipping cannot be drawn on Rhema outputs: ${shapeClipIssue({ width: node.width, height: node.height, clips: ellipseClips })}`)
       const edge = shapeOutline(node, false)
       if ("issue" in edge) refuse(edge.issue)
       else if (edge.outline) layer.outline = edge.outline
@@ -485,6 +507,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         layer.color = gradientFallback(gradient)
         layer.gradient = gradient
       }
+      if (compatible && ellipseClip) layer.shapeClip = ellipseClip
+      else if (compatible) delete layer.shapeClip
     } else if (node.type === "polygon") {
       // A polygon or star (#448): its points, filled and outlined as a rectangle is.
       const gradient = node.fill.type === "gradient" ? normalizeGradient(node.fill) : undefined
