@@ -198,6 +198,19 @@ afterEach(() => {
 })
 
 describe("Live's Rhema recording dock", () => {
+  it("opens its controls from Live's status row, not from the pill, so they stay inside the window", async () => {
+    await renderDock()
+    const panel = host.querySelector<HTMLElement>("[data-recorder-panel]")!
+    // The pill sits at the left of the row: a panel pinned to its right edge ran off the window (14 Nov).
+    expect(panel.className).toContain("left-4")
+    expect(panel.className).not.toContain("right-0")
+    let el = panel.parentElement
+    while (el && el !== host) {
+      expect(el.className).not.toMatch(/(^|\s)relative(\s|$)/)
+      el = el.parentElement
+    }
+  })
+
   it("keeps a failed start alert visible after navigating away from Live", async () => {
     native.invoke.mockImplementation(async (command: string) => {
       if (command === "recorder_status") return idleStatus

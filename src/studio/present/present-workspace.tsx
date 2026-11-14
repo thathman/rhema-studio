@@ -216,7 +216,7 @@ export function PresentWorkspace() {
     <div className="flex h-full flex-col">
       {/* One Live console: Run of show, Preview, Program and Take never change with a view preference. */}
       {/* One status row (UX audit §4): what is on air and every status as a pill; tools on the right. */}
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+      <header className="relative flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2">
         <div className="contents">
           <div className="mr-1 min-w-0 max-w-64">
             <h1 className="sr-only">Live console</h1>
