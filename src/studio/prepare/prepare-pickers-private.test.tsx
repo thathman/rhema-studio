@@ -84,4 +84,24 @@ describe("Prepare's pickers stay private (#447)", () => {
     expect(select).not.toHaveBeenCalled()
     expect(preview()).toEqual(before)
   })
+
+  it("finds a passage by its words in the church's second Bible when the active one has none (Yorùbá)", async () => {
+    const { invoke } = await import("@tauri-apps/api/core")
+    vi.spyOn(bibleActions, "searchVerses").mockResolvedValue([])
+    const fetch = vi.spyOn(bibleActions, "fetchVerse").mockResolvedValue(verse)
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => command === "search_verses" && (args as { translationId: number }).translationId === 2 ? [{ ...verse, translation_id: 2, text: "Nítorí Ọlọ́run fẹ́ aráyé" }] : null)
+    useBibleStore.setState({ activeTranslationId: 1, secondaryTranslationId: 2 } as never)
+    useSongStore.setState({ lookup: async () => [], all: async () => [], loadHymnbooks: async () => {} } as never)
+    await act(async () => root!.render(<QuickFind mode="prepare" scope="bible" />))
+    const input = document.querySelector<HTMLInputElement>("input")!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "olorun fe araye")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 600)) })
+    // Shown as the passage in the active Bible, like any other result.
+    expect(fetch).toHaveBeenCalledWith(verse.book_number, verse.chapter, verse.verse)
+    expect([...document.querySelectorAll("li button")].some((b) => b.textContent?.includes("John 3:16"))).toBe(true)
+    vi.mocked(invoke).mockImplementation(async () => null)
+  })
 })

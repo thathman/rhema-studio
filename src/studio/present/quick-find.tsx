@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { invoke } from "@tauri-apps/api/core"
 import { MusicIcon, PlusIcon, RadioTowerIcon, SearchIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -76,6 +77,18 @@ export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "
           bibleOnly ? Promise.resolve([] as SongSummary[]) : songs.lookup(q, 6).catch(() => [] as SongSummary[]),
           bookChapter ? bibleActions.fetchVerse(bookChapter.book.book_number, bookChapter.chapter, 1).catch(() => null) : Promise.resolve(null),
         ])
+        // Words in the church's second language ("olorun fe araye"): nothing in the active Bible, so look in
+        // the second one and show each passage found as usual (bilingual screens still show both). Accents
+        // are optional (the index ignores them).
+        if (verses.length === 0) {
+          const bible = useBibleStore.getState()
+          const second = bible.secondaryTranslationId
+          if (second && second !== bible.activeTranslationId) {
+            const there = await invoke<Verse[]>("search_verses", { query: q, translationId: second, limit: 8 }).catch(() => [] as Verse[])
+            const same = await Promise.all(there.map((v) => bibleActions.fetchVerse(v.book_number, v.chapter, v.verse).catch(() => null)))
+            verses.push(...same.filter((v): v is Verse => !!v?.text?.trim()))
+          }
+        }
         // Nothing exact: forgive a typo or two against every title and first line.
         const hits = bibleOnly ? [] : exact.length > 0 ? exact : fuzzySongs(q, await songs.all().catch(() => [] as SongSummary[]))
         const others = verses.filter((v) => !start || v.book_number !== start.book_number || v.chapter !== start.chapter || v.verse !== start.verse)
