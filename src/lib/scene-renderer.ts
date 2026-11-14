@@ -443,7 +443,7 @@ function paintVector(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, v: Scene
 function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, span: FrameSpan): void {
   // A rectangle or ellipse clipped in the editor (#448): its clips, in its own size centred on the box, then
   // the shape as usual. A canvas clip stays where it was set when the transform goes back.
-  if (l.shapeClip && ((l.kind === "color" && (!l.vector || l.vector.type === "polygon")) || l.kind === "ellipse")) {
+  if (l.shapeClip && ((l.kind === "color" && (!l.vector || l.vector.type === "polygon")) || l.kind === "ellipse" || l.kind === "text")) {
     ctx.save()
     const t = ctx.getTransform()
     ctx.translate(r.x + r.w / 2, r.y + r.h / 2)

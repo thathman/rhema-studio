@@ -216,6 +216,41 @@ describe("scene paint on a real canvas", () => {
     expect(stored.layers.map((l) => [l.id, l.shadow ?? null, l.blur ?? null])).toEqual([["card", shadowed.layers[0]!.shadow, null], ["soft", null, 30], ["bad", null, null]])
   })
 
+  it("clips words in their laid-out box as the Avnac editor does, and refuses a box taller than the words (#448)", async () => {
+    // A box no taller than the words, so the saved box is the editor's laid-out box.
+    const words: Scene = { ...painted, id: "clip-words", backgroundGradient: undefined, background: "#0b1a3a", layers: [
+      layer("t", "text", { text: "GLORY", fontFamily: "Arial", fontSize: 200, fontWeight: "900", textColor: "#d14c62", box: { x: 20, y: 30, w: 60, h: 1 } }),
+    ] }
+    const design = sceneToDesign(words)
+    const width = 0.6 * 1920
+    // Keep the left half of the box: from its left edge to its centre.
+    const clip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "t", clipPath: { type: "rect", x: -width / 4, y: 0, width: width / 2, height: 2000, radiusX: 0, radiusY: 0 } })
+    const saved = designToScene({ ...design, scene: clip })
+    expect(saved.issues).toEqual([])
+    expect(saved.scene.layers[0]!.shapeClip).toMatchObject({ width, clips: [{ type: "rect", width: width / 2 }] })
+    expect(sceneToDesign(saved.scene).scene.nodes.t).toMatchObject({ clipPath: { type: "rect", width: width / 2 } })
+    const out = drawOutput(saved.scene, 1920, 1080)
+    const box = saved.scene.layers[0]!.box
+    const top = (box.y / 100) * 1080, bottom = top + (box.h / 100) * 1080, mid = 0.5 * 1920
+    let left = 0, right = 0
+    for (let x = 384; x < 1536; x += 3) for (let y = Math.floor(top); y < bottom; y += 3) {
+      if (near(pixel(out, x, y), ROSE, 40)) { if (x < mid - 2) left++; else if (x > mid + 2) right++ }
+    }
+    // Words on the left half only: the right half is clipped away, as the editor clips it.
+    expect([left > 50, right]).toEqual([true, 0])
+    const editor = createCanvas(1920, 1080)
+    await canvas2DRendererBackend.render(ctxOf(editor), buildRenderCommands(clip))
+    let eLeft = 0, eRight = 0
+    for (let x = 384; x < 1536; x += 3) for (let y = Math.floor(top); y < bottom; y += 3) {
+      if (near(pixel(editor, x, y), ROSE, 40)) { if (x < mid - 2) eLeft++; else if (x > mid + 2) eRight++ }
+    }
+    expect([eLeft > 50, eRight]).toEqual([true, 0])
+    // A box kept taller than the words would put the clip elsewhere on outputs: refused, with the reason.
+    const tall = sceneToDesign({ ...words, layers: [{ ...words.layers[0]!, box: { x: 20, y: 30, w: 60, h: 60 } }] })
+    const tallClip = applyCommand(tall.scene, { type: "SET_NODE_CLIP_PATH", id: "t", clipPath: { type: "rect", x: 0, y: 0, width: 100, height: 100, radiusX: 0, radiusY: 0 } })
+    expect(designToScene({ ...tall, scene: tallClip }).issues).toContainEqual({ nodeId: "t", message: expect.stringContaining("height of its words") })
+  })
+
   it("paints words with a gradient and an outline as the Avnac editor does (#448)", async () => {
     const words: Scene = { ...painted, id: "words2", backgroundGradient: undefined, background: "#0b1a3a", layers: [
       layer("t", "text", { text: "GLORY", fontFamily: "Arial", fontSize: 200, fontWeight: "900", textColor: "#d14c62", textGradient: g(90, ["#d14c62", 0], ["#3157a4", 1]), textOutline: { color: "#ffffff", width: 6 }, box: { x: 20, y: 30, w: 60, h: 22 } }),
