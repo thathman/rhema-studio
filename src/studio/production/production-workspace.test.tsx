@@ -379,6 +379,19 @@ describe("Production control", () => {
     useBroadcastStore.setState({ outputs: before })
   })
 
+  it("offers each output's screen test from Live tools → Screens, to identify which screen is which (#445)", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    useProductionTab.setState({ requested: "screens" })
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el))
+    expect(el.textContent).toContain("Identify or test a screen")
+    const tests = [...el.querySelectorAll("button")].filter((b) => b.textContent?.includes("Test this screen"))
+    expect(tests).toHaveLength(useBroadcastStore.getState().outputs.length)
+    // An output that is off cannot show it: the button says to turn it on first.
+    expect(tests.every((b) => b.disabled)).toBe(true)
+  })
+
   it("shows a missing second-language fallback to operators in the output inspector", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const before = useBroadcastStore.getState()

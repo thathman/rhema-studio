@@ -1,4 +1,5 @@
 import { tablistKeys } from "@/lib/tablist-keys"
+import { ScreenTestRow } from "@/studio/setup/screen-test"
 import { PRODUCTION_TABS } from "@/studio/production/production-tab"
 import { useDismissedChecks } from "@/studio/dismissed-checks"
 import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
@@ -303,6 +304,12 @@ function Screens() {
       <ul aria-label="Outputs" className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         {outputs.map((o) => <OutputInspector key={o.id} output={o} status={status[o.id]} frame={frames[o.id]} scenes={scenes} themes={themes} />)}
       </ul>
+      {/* Which screen is which (#445 Identify TV): the setup's screen test, from Live, at any time: the
+          output's name and size on that screen until End test, with the same on-air warnings. */}
+      <details className="rounded-md border border-border px-3 py-2">
+        <summary className="cursor-pointer text-xs font-semibold">Identify or test a screen</summary>
+        <div className="mt-2 flex flex-col gap-1">{outputs.map((o) => <ScreenTestRow key={o.id} output={o} item={undefined} />)}</div>
+      </details>
     </Card>
   )
 }
