@@ -189,7 +189,7 @@ export function CameraDesk({ live }: { live: LiveStateV1 }) {
   return (
     <section aria-label="Camera desk" className={box}>
       <p className="font-semibold">Cameras</p>
-      {cams.length === 0 && <p className="text-muted-foreground">No cameras on the main computer yet (Live → Production tools → Cameras there).</p>}
+      {cams.length === 0 && <p className="text-muted-foreground">No cameras on the main computer yet (Live → Live tools → Cameras there).</p>}
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {cams.map((c) => (
           <li key={c.id} className="flex min-w-0 flex-col gap-1 rounded-md border border-border p-2">

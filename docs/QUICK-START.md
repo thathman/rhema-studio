@@ -33,7 +33,7 @@ Your name at the foot of the sidebar opens the **Desk menu**: your name, this co
 
 ## The first time on a new computer (2 minutes)
 
-![The welcome window with its five choices: set up this computer as the main desk, join an existing church host, this computer runs OBS only (companion), bring in a previous installation, use Rhema Studio now and finish later](images/manual/setup-welcome.png)
+![The Welcome window over Prepare, with its five choices: set up this computer as the main computer (recommended), join the church's main computer, this computer runs OBS only (companion), bring in a previous installation, and use Rhema Studio now and finish later](images/manual/setup-welcome.png)
 
 On a new install Rhema opens **Welcome to Rhema Studio** once. Choose:
 
@@ -63,7 +63,7 @@ Home is the first thing to look at on a Sunday morning. It shows the next servic
 
 ## Before the service: Prepare (10 minutes)
 
-![Prepare: the saved Sunday Service with History, Copy, New service and Approve; the four phases (pre-service loop, warm-up, main service, post-service loop); the order of service with Undo and Redo above it and Group, Phase and Cue below it; Amazing Grace selected, its first verse in the preview and Title slide first](images/manual/prepare.png)
+![Prepare: the sample order of service (seven items, 18 min planned) not yet saved, with Save as a service…, Timing and Open Live above it; Add Event, Organise into phases, Group and Cue around the list; Psalms 23:1 selected, with its Slides, Stage screen, Notes, Cues and Timing tabs, its preview and its translations](images/manual/prepare.png)
 
 First time at this computer? Click **Add your name** at the bottom of the sidebar and type your name (Enter saves). The same menu switches Light, Dark or System and opens Settings, setup and help. Want more room? **Collapse** (just above your name, or ⌘B / Ctrl+B) folds the sidebar to icons; it stays that way on this computer until you expand it.
 
@@ -84,7 +84,7 @@ First time at this computer? Click **Add your name** at the bottom of the sideba
 
 ## During the service: Live
 
-![Live, the live console: the Automated phases strip with Start for each loop, the running order in its phases on the left, Preview and Live side by side, the bar with Previous, Next, the verse buttons, Take live, Clear and Restore, and Find and cue anything with the one-touch moments below](images/manual/present.png)
+![Live: the running order with John 3:16 live and Romans 8:28 next; Preview showing Romans 8:28 and Program showing John 3:16 on air; the status bar (target screen, rehearsal, outputs, Rhema recording) with Find & listen, Live tools, Show health and Service timer; Previous, Next, the verse buttons, Take, Clear and Restore; and the one-touch moments (Welcome, Please stand, Let us pray, Offering, Technical issue, Logo, Black)](images/manual/present.png)
 
 | Want to… | Do |
 |---|---|
@@ -142,27 +142,25 @@ A service with a cue-only item opens in an older Rhema Studio but cannot be save
 
 **Scenes** are arranged in **Design → Scenes**: put the Bible, lyrics, a camera, a video, a clock, the ticker and the logo on one frame and save it. On Live, choose a scene for a screen and **Take** it.
 
-![Live tools → Screens: two output cards, the main display and a browser feed for the Bible as a lower third, each with where it goes, what it follows, its language and look](images/manual/production-screens.png)
+![Live tools → Screens: Add a ready-made feed and Open outputs; the News ticker card; and two output cards, Main Display and a browser feed for the Bible as a lower third, each with where it goes, what it follows, its presentation, language, look, safe area and whether it is on, and Edit output](images/manual/production-screens.png)
 
-![Show health: the Sunday preflight list (Bible, theme, no output on a screen yet, items, listening off, not approved, OBS not connected, a look whose font lacks Yorùbá letters, works without the internet), with This computer and What this computer is running below](images/manual/production-show-health.png)
-
-*In the picture the font warning comes from the browser the picture was taken in; the desktop app checks its own fonts.*
+![Show health, opened from Live: the Sunday preflight list (Bible library loaded, theme, no output on a screen yet, items in the service, listening off, OBS not connected, fonts that draw Yorùbá, works without the internet), with Remote control access and This computer below](images/manual/production-show-health.png)
 
 *Checked on the desktop: the OBS tab (10ek.1–10ek.9), a camera that stops sending in Show health (10dy.4), the first Show health check (10db.1), running late and the timer from a joined desk (10de.1–10de.3), the run-of-show table (10dg.1). Scenes, Screens and the capacity limits are built, not yet checked on the desktop (acceptance 10cs, 10eu, 10dl, 10ew).*
 
 ## Design
 
-Design is where every look is made: **Themes** (how verses, songs, slides and pictures look), **Library** (ready-made looks in six families), **Lower thirds**, **News ticker**, **Stage**, **Countdown** (one big time that turns amber, then red, as time runs out; show it on a stage output or the ready-made feed **Rhema Countdown**), **Brand kit** (church name, colours, fonts, logo) and **Used on…** (which outputs use each look, with **Open output** to change it). **Use** in the Library adds your own copy; nothing on the screens changes until you choose that copy for an output. Edits to a look stay a draft in Design until you save; **Live edit** (off unless you turn it on) shows a draft on the screens as you edit.
+Design is where every look is made, in three tabs. **Make**: **My Designs**, **Templates** (ready-made looks in six families), **Scenes**, **Lower thirds**, **News ticker**, **Countdown** (one big time that turns amber, then red, as time runs out; show it on a stage output or the ready-made feed **Rhema Countdown**) and **Stage**. **Style**: **Themes** (how verses, songs, slides and pictures look) and **Brand kit** (church name, colours, fonts, logo). **Where used**: which outputs use each look, with **Open output** to change it. **Add a copy** in Templates adds your own copy; nothing on the screens changes until you choose that copy for an output. Edits to a look stay a draft in Design until you save; **Live edit** (off unless you turn it on) shows a draft on the screens as you edit.
 
-![Design → Library: Import design pack, filters for layout (including OBS overlay), background and language, and the Church Classic family of ready-made looks with Use, Use and edit, and Use with church colours](images/manual/design-library.png)
+![Design → Templates: Import design pack, a search box, filters for layout (including OBS overlay), background and language, and the Church Classic family of ready-made looks, each with Add a copy, Customize a copy and Add with church colours](images/manual/design-library.png)
 
-**Import design pack** (Design → Library) adds the looks in a Rhema design pack file under the pack's name; the repository has one, *Worship Expressions* (`design-packs/`, 120 looks and 56 scene templates). Importing asks first and changes no screen; **Remove pack** takes it out and keeps your copies. *Built, not yet checked on the desktop (acceptance 10fp).*
+**Import design pack** (Design → Templates) adds the looks in a Rhema design pack file under the pack's name; the repository has one, *Worship Expressions* (`design-packs/`, 120 looks and 56 scene templates). Importing asks first and changes no screen; **Remove pack** takes it out and keeps your copies. *Built, not yet checked on the desktop (acceptance 10fp).*
 
 *Checked on the desktop: the scripture-strip lower third, lower-third styles, the stage over NDI, signage and the ticker (10co.2–10co.6). The Library, Used on…, output cards and a different look per content are built, not yet checked on the desktop (acceptance 10dk, 10er, 10dl, 10co.1).*
 
 ## The countdown display
 
-![Design → Countdown: a black preview with "Service timer", the time of day and a big 10:00 over "Sermon"; the slider with Start, 25%, 10%, Time's up and Over; the colour steps (amber at 25 % of the time left, red with "Please wrap up" at 10 %, red with "Time's up" and a gentle pulse at 0:00) and what else it shows](images/manual/design-countdown.png)
+![Design → Countdown: a black preview with "Service timer", the time of day and a big 10:00 over "Sermon"; the slider with Start, 25%, 10%, Time's up and Over; what it counts; the Brand Kit colours; and the colour steps (amber at 25 % of the time left, red with "Please wrap up" at 10 %)](images/manual/design-countdown.png)
 
 One big time for the pastor, a confidence monitor or a TV at the back of the hall. The screen starts black and changes colour in steps as time runs out: by default **amber at 25 %** of the time left, **red at 10 %** with "Please wrap up" (a 10-minute timer goes red at 1:00), then **Time's up** with a slow pulse, and it counts on in red as **+0:42** when over.
 
@@ -178,7 +176,7 @@ The screens count the seconds themselves, so it stays smooth on a Google TV and 
 
 Open Settings from the Desk menu (or ⌘, / Ctrl+,). The left list groups the sections under seven headings: **Church and profile** (the church's name, campus, languages, time zone, your name and this computer's name; Bible), **Audio and speech** (Audio, Speech Recognition), **Connections** (Network & remote access, Outputs), **AI and MCP** (AI assistants), **Data and sync**, **Preferences** (Appearance: light, dark or system; Heard verses) and **Diagnostics and about**. Type in the search box to find any setting ("gain", "church name", "dark", "backup"); things that live elsewhere (the church's logo and colours, cameras, hosting) are listed under **Elsewhere in Rhema** with a link. Settings are kept on this computer; saved keys and passwords go into the system keychain where there is one, and a backup never carries them.
 
-![Settings with "gain" typed in the search: one section matches, Audio, with the input gain slider marked, and below it the Talk headset and the Talk channels (which roles may hear and talk on Production and Stage & worship, and the priority level)](images/manual/settings-search.png)
+![Settings with "gain" typed in the search: one section matches, Audio, with the input gain slider marked, and below it the Talk headset, private listening and the Talk channels (which roles may hear and talk on Production)](images/manual/settings-search.png)
 
 *Built, not yet checked on the desktop (acceptance 10dt, 10di.12–10di.14, 10es.9, 10ev.11).*
 
@@ -213,7 +211,7 @@ One computer, the **main desk** (the host), runs the service and keeps every con
 - **The host card** (Connections → Host the service; the same card is in Live tools → Operators) shows this computer's address on each network (give joining computers that one), the secure link with its **certificate code** (four-character groups such as `3F2A 9C11 07BD 44E0 A1C3`), each paired desk as **Connected now** or **Seen 5 min ago** with its address, and **Stop hosting**, which disconnects every desk, phone and browser feed while the service here carries on.
 - **Encrypted desks.** When the host has **Secure page for phones (https)** on, a desk pairs and works over https and from then on trusts only that host's certificate. Its header says **Encrypted · certificate …**: the same groups as the host card. Without it the desk says **Not encrypted.** with the steps to turn the secure link on, then pair again.
 
-![Connections → Host the service: Host the service on the left (hosting on the church network on port 8080, the address 192.168.1.20:8080, the secure link on port 8081 with its certificate code, Ade connected now, Media desk seen 5 min ago, Pair an operator and Stop hosting) and Join a host on the right (Find hosts, the host's address and port, the pairing code and this computer's name)](images/manual/production-operators.png)
+![Live tools → Operators: Host the service on the left (hosting on the church network on port 8080, the address 192.168.1.20, the secure link on port 8081 with its certificate code, the Media desk connected now, Manage access and roles… and Stop hosting) and Join a main computer on the right](images/manual/production-operators.png)
 
 *Checked on the desktop on one Mac, with the joined desks simulated by their keys (no second computer): a Bible key cannot Hold (10ef.4), a paused desk's commands are refused (10dq.3), a desk on another service is refused (10dq.5), running late and the timer from a joined desk (10de.2, 10de.3), Timekeeper commands (10cu.2, 10cu.3), notices (10cu.8), priority talk and revoking a talking desk (10dd.1, 10dd.2). A two-computer run, the new roles, the host card and encrypted desks are not yet checked (acceptance 10cu.1, 10eq.3, 10ev.1, 10ez, 10fk).*
 
@@ -258,7 +256,7 @@ A Chromecast with Google TV (or another Android TV) can show a browser feed full
 
 Phones on the church Wi-Fi can be cameras. Connections → Cameras → type a name ("Pulpit") → **Add camera**; scan its QR code with the phone, allow the camera and press **Start camera**. Each camera goes once to the camera router that comes with Rhema; a scene's Camera layer picks it by name, and OBS takes its RTSP address in a Media Source. While a camera is not sending, its box in a scene shows colour bars (or TV static, words or nothing: **When the camera isn't sending** on the Camera layer). Phones need the secure phone page (Settings → Network & remote access → **Secure page for phones (https)**). Nothing goes to the internet. **New link** closes the old link. Step by step: [cameras](rhema-studio/cameras.md).
 
-![Live tools → Cameras: the camera router on at 192.168.1.20, Add a camera, and the Pulpit camera sending (H264, 1920×1080, 4.2 Mbit/s, read by Rhema Studio screens on this computer), with its QR code, the camera page link, its address for Rhema Studio scenes and TVs, its address for OBS, and the Rhema Studio Cam app QR code and link](images/manual/production-cameras.png)
+![Live tools → Cameras: the camera router on at 192.168.1.20, Add a camera, and the Pulpit camera sending, with its camera page link for the phone, its address for Rhema Studio scenes and TVs, its address for OBS, Test camera, and its QR code under a fold](images/manual/production-cameras.png)
 
 Each camera's card shows what really arrives: **Sending** with its picture size, Mbit/s and the frames a second the screens show, or **Frozen** (connected, but nothing has arrived for a few seconds), or **Not sending**, and who reads it. If a camera misbehaves during the service: **Retry** (every screen and TV connects to it again), **Switch to backup** (choose a backup camera on the card first; **Back to …** returns), or **Freeze** (the screens hold the last frame until **Unfreeze**). These do nothing in rehearsal. Each output can also choose its own **When a camera isn't sending**, including another camera that steps in.
 
@@ -284,9 +282,9 @@ Rhema works beside OBS in two ways:
 
 - **Pictures into OBS:** **Live tools → Screens → Add a ready-made feed** adds an output named for OBS ("Rhema Bible | Lower third", "Rhema Lyrics | Full", "Rhema Ticker | Alpha"…) as an NDI sender (add an NDI source in OBS) or a browser feed (paste its link into an OBS Browser source, 1920×1080). A Bible feed keeps the verse while a hymn is on the projector and changes the moment the next verse is shown.
 - **The cameras in OBS on another computer:** see [A second computer for OBS](#a-second-computer-for-obs) below.
-- **OBS's own scenes:** connect in **Connections → OBS** (OBS's address, port 4455 and its WebSocket password). Live's status bar then shows OBS's recording state. **Production → OBS** lists OBS's scenes and which is on OBS's program; in Studio Mode **Set as OBS preview** and **Take in OBS**, otherwise **Switch OBS to this scene…** (it asks first). Taking a Rhema scene or showing a verse never changes OBS; only these buttons do. In rehearsal they do nothing. The tab also shows what OBS reports about the stream and the recording (live or not, time, bitrate, dropped frames, OBS's frames a second and CPU), OBS's inputs with their mute state and sound level (shown only), and **OBS's transition** (Cut, Fade…), which changes only how OBS's next switch looks. Settings → Network & remote access can keep several **saved OBS computers** ("Main stream PC", "Backup laptop") with **Test** and **Use**.
+- **OBS's own scenes:** connect in **Connections → OBS** (OBS's address, port 4455 and its WebSocket password). Live's status bar then shows OBS's recording state. **Live tools → OBS** lists OBS's scenes and which is on OBS's program; in Studio Mode **Set as OBS preview** and **Take in OBS**, otherwise **Switch OBS to this scene…** (it asks first). Taking a Rhema scene or showing a verse never changes OBS; only these buttons do. In rehearsal they do nothing. The tab also shows what OBS reports about the stream and the recording (live or not, time, bitrate, dropped frames, OBS's frames a second and CPU), OBS's inputs with their mute state and sound level (shown only), and **OBS's transition** (Cut, Fade…), which changes only how OBS's next switch looks. Settings → Network & remote access can keep several **saved OBS computers** ("Main stream PC", "Backup laptop") with **Test** and **Use**.
 
-![Live tools → OBS: Online program (OBS, 720p30) connected, Pulpit cam on OBS's program and Wide + lyrics in OBS's preview, Take in OBS, OBS's transition; the list of OBS's scenes with Set as OBS preview; the stream live and recording with bitrate and dropped frames; OBS's inputs with a level and Muted](images/manual/production-obs.png)
+![Live tools → OBS: Online program (OBS, 720p30), Pulpit cam on OBS's program and Wide + lyrics in OBS's preview, Take in OBS; the list of OBS's scenes with Set as OBS preview; and the stream and recording as OBS reports them](images/manual/production-obs.png)
 
 *The picture uses made-up OBS figures (no OBS was connected to the browser the picture was taken in).*
 

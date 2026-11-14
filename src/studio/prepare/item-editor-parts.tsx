@@ -696,7 +696,7 @@ export function LookAndScene({ item, eventId, eventTitle }: { item: QueueItem; e
       {eventId && eventTitle && <SceneDesignPicker eventId={eventId} eventTitle={eventTitle} momentId={item.id} momentTitle={item.reference} onSceneSelected={setScene} />}
       {scenes.length === 0 && cameras.length === 0 && (
         <p className="text-muted-foreground">
-          {eventId ? "Choose from Design above to add a scene to this moment, or create a custom scene in Design → Scenes. Cameras are managed in Live → Production tools → Cameras." : "Scenes are made in Design → Scenes, cameras in Live → Production tools → Cameras."}
+          {eventId ? "Choose from Design above to add a scene to this moment, or create a custom scene in Design → Scenes. Cameras are managed in Live → Live tools → Cameras." : "Scenes are made in Design → Scenes, cameras in Live → Live tools → Cameras."}
         </p>
       )}
     </section>
@@ -819,7 +819,7 @@ export function TakeSteps({ item }: { item: QueueItem }) {
           aria-label={`OBS scene when ${item.reference} is taken`}
           list={listId}
           value={obsText ?? (obs?.kind === "obs" ? obs.scene : "")}
-          placeholder={obsOn ? "An OBS scene, e.g. Sermon" : "Connect OBS in Live → Production tools → OBS first"}
+          placeholder={obsOn ? "An OBS scene, e.g. Sermon" : "Connect OBS in Live → Live tools → OBS first"}
           maxLength={180}
           className="h-7 text-xs"
           onChange={(e) => setObsText(e.target.value)}

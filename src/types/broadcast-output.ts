@@ -220,7 +220,7 @@ export type CountdownCounts = "timer" | "item" | "aux" | "until" | "start" | "it
 /** The countdown display's design (Design → Countdown): one big time, readable from the back. */
 export interface CountdownLook {
   counts: CountdownCounts
-  /** counts "aux": the extra timer's name (Live → Production tools → Timekeeper). */
+  /** counts "aux": the extra timer's name (Live → Live tools → Timer). */
   auxLabel: string
   /** counts "until": the time of day, "HH:MM". */
   until: string

@@ -123,7 +123,7 @@ function HostCard({ secure }: { secure: boolean }) {
       {words.detail && status !== "connected" && <p role="alert" aria-label="Why the main computer is not connected" className="text-destructive">{words.detail}</p>}
       {wrongRole && <p role="alert" className="font-semibold">The main computer has this computer as {roleLabel(me.role)}. On the main computer: Permissions, set "{me.name}" to OBS companion, so it may read the cameras.</p>}
       {!wrongRole && hostError && <p role="alert" className="font-semibold">{hostError}</p>}
-      {status === "connected" && heard && !hostError && !router && <p className="font-semibold">The camera router is off on the main computer. Turn it on there: Live → Production tools → Cameras.</p>}
+      {status === "connected" && heard && !hostError && !router && <p className="font-semibold">The camera router is off on the main computer. Turn it on there: Live → Live tools → Cameras.</p>}
       {secure && <PinnedCertificate />}
       {leaving ? (
         // Leaving forgets the pairing (#831 S7): asked first, since joining again needs a new code from the host.
@@ -185,7 +185,7 @@ function Cameras() {
         // Not "none": the host is not answering for them now (the error is above). OBS keeps what it has.
         <p className="text-muted-foreground">The main computer's camera list cannot be read right now. Cameras already in OBS stay as they are.</p>
       ) : cameras.length === 0 ? (
-        <p className="text-muted-foreground">No cameras on the main computer yet. They are added there: Live → Production tools → Cameras.</p>
+        <p className="text-muted-foreground">No cameras on the main computer yet. They are added there: Live → Live tools → Cameras.</p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
