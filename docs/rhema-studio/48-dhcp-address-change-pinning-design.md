@@ -1,6 +1,6 @@
 # 48 · Keeping the Receiver and Rhema Cam paired when the Mac's address changes
 
-Status: **design for owner/Codex review — no code yet.**
+Status: **built** — option (a): #899 (host keeps one server key per local CA), #903 (Receiver 1.8) and #901 (Rhema Cam 1.6), 12 Nov 2026; see the tracker row "TV/Cam after the host's address changes".
 Problem (confirmed on device, 2026-11-11): after a DHCP change, the Rhema Receiver (Google TV, `android-tv/`) and Rhema Cam (`android-camera/`) keep the Mac's old address and never find it again by themselves.
 
 ## Why it breaks today
