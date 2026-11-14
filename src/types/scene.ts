@@ -86,6 +86,13 @@ export type NoSignal = "bars" | "static" | "words" | "none"
 export const NO_SIGNALS: readonly NoSignal[] = ["bars", "static", "words", "none"]
 
 /** A shape's outline (#448): a solid colour, centred on its edge like the Design editor's stroke. */
+/** A rectangle's or ellipse's clips as the editor keeps them (#448): in the shape's own size, centred on it. */
+export interface ShapeClip {
+  width: number
+  height: number
+  clips: SceneClip[]
+}
+
 export interface SceneOutline {
   color: string
   /** px on the 1920×1080 artboard. */
@@ -141,6 +148,8 @@ export interface SceneLayer {
   gradient?: SceneGradient
   /** color, ellipse: an outline drawn on the shape's edge, as the editor does (width in px on the 1920×1080 artboard; #448). */
   outline?: SceneOutline
+  /** color (not a vector), ellipse: clipped as the editor clips it (#448). */
+  shapeClip?: ShapeClip
   /** color: rounded corners, px on the 1920×1080 artboard (#448). */
   corner?: number
   /** color: drawn as this polygon, star, line or arrow instead of its box (#448). */
@@ -250,6 +259,8 @@ export interface SceneLayerFrame {
   /** color, ellipse: drawn instead of `color`. */
   gradient?: SceneGradient
   outline?: SceneOutline
+  /** color (not a vector), ellipse: clipped as the editor clips it (#448). */
+  shapeClip?: ShapeClip
   corner?: number
   vector?: SceneVector
   textGradient?: SceneGradient

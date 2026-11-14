@@ -1,4 +1,4 @@
-import type { ImageDraw, Scene, SceneClip } from "../types/scene"
+import type { ImageDraw, Scene, SceneClip, ShapeClip } from "../types/scene"
 
 /**
  * Pictures cropped, rounded and clipped in the Avnac editor (#448 Slice B), kept as the editor
@@ -35,6 +35,28 @@ export function imageDrawIssue(raw: unknown): string | null {
     }
   }
   return null
+}
+
+/** Why a rectangle's or ellipse's clips cannot be drawn on outputs, or null (#448). */
+export function shapeClipIssue(raw: unknown): string | null {
+  const d = raw as Partial<ShapeClip> | null
+  if (!d || typeof d !== "object") return "A clipped shape needs its size and clips"
+  if (!finite(d.width, 0.001, SIZE) || !finite(d.height, 0.001, SIZE)) return "A clipped shape needs a finite size"
+  if (!Array.isArray(d.clips) || d.clips.length === 0 || d.clips.length > MAX_IMAGE_CLIPS) return `A shape can have 1 to ${MAX_IMAGE_CLIPS} clips`
+  for (const clip of d.clips) {
+    const why = clipIssue(clip)
+    if (why) return why.replace("Pictures", "Shapes").replace("A picture's", "A shape's")
+  }
+  return null
+}
+
+/** A copy of a shape's clips Rhema can draw, or undefined. */
+export function normalizeShapeClip(raw: unknown): ShapeClip | undefined {
+  if (shapeClipIssue(raw)) return undefined
+  const d = raw as ShapeClip
+  return { width: d.width, height: d.height, clips: d.clips.map((c): SceneClip => (c.type === "ellipse"
+    ? { type: "ellipse", x: c.x, y: c.y, width: c.width, height: c.height }
+    : { type: "rect", x: c.x, y: c.y, width: c.width, height: c.height, radiusX: c.radiusX, radiusY: c.radiusY })) }
 }
 
 /** A copy of a picture's editor drawing Rhema can draw, or undefined. */

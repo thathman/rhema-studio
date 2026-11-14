@@ -441,6 +441,19 @@ function paintVector(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, v: Scene
 
 /** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
 function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, span: FrameSpan): void {
+  // A rectangle or ellipse clipped in the editor (#448): its clips, in its own size centred on the box, then
+  // the shape as usual. A canvas clip stays where it was set when the transform goes back.
+  if (l.shapeClip && ((l.kind === "color" && !l.vector) || l.kind === "ellipse")) {
+    ctx.save()
+    const t = ctx.getTransform()
+    ctx.translate(r.x + r.w / 2, r.y + r.h / 2)
+    ctx.scale(r.w / l.shapeClip.width, r.h / l.shapeClip.height)
+    for (const clip of l.shapeClip.clips) applyCanvas2DClipPath(ctx, clip)
+    ctx.setTransform(t)
+    paintLayer(ctx, { ...l, shapeClip: undefined }, r, height, opts, span)
+    ctx.restore()
+    return
+  }
   if (l.kind === "color" && l.vector) {
     paintVector(ctx, l, l.vector, r, height)
   } else if (l.kind === "color" && !l.corner && !l.outline) {

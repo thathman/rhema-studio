@@ -153,12 +153,28 @@ describe("Rhema scenes in the Avnac engine", () => {
     const stretchedStroke = { ...stroke, nodes: { ...stroke.nodes, oval: { ...stroke.nodes.oval, scaleX: 2 } } } as typeof stroke
     expect(designToScene({ ...design, scene: stretchedStroke }).issues).toContainEqual({ nodeId: "oval", message: expect.stringContaining("stretched shape") })
     const clip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "oval", clipPath: { type: "ellipse", x: 0, y: 0, width: 100, height: 100 } })
-    expect(designToScene({ ...design, scene: clip }).issues).toContainEqual({ nodeId: "oval", message: "Ellipse clipping cannot be saved into a Rhema scene yet" })
+    // Clipped in the editor (#448): saved in the ellipse's own size, drawn on outputs, and back in the editor on reopen.
+    const clipped = designToScene({ ...design, scene: clip })
+    expect(clipped.issues).toEqual([])
+    expect(clipped.scene.layers[0].shapeClip).toMatchObject({ clips: [{ type: "ellipse", x: 0, y: 0, width: 100, height: 100 }] })
+    expect(sceneToDesign(clipped.scene).scene.nodes.oval).toMatchObject({ clipPath: { type: "ellipse", width: 100, height: 100 } })
     const rotated = applyCommand(design.scene, { type: "ROTATE_NODE", id: "oval", rotation: 12 })
     // A turned layer saves its turn (#851 G7): outputs turn it about its box's centre.
     expect(designToScene({ ...design, scene: rotated })).toMatchObject({ issues: [], scene: { layers: [{ id: "oval", rotation: 12 }] } })
     const flipped = designToScene({ ...design, scene: { ...design.scene, nodes: { ...design.scene.nodes, oval: { ...oval, scaleX: -1 } } } })
     expect(flipped.issues).toContainEqual({ nodeId: "oval", message: "Ellipse must keep a positive, finite scale for Rhema scene output" })
+  })
+
+  it("saves a rectangle's clips and reopens them; a live layer's clip is still refused (#448)", () => {
+    const rectScene: Scene = { ...sermon, layers: [layer("panel", "color", { color: "#101820" }), layer("ticker", "ticker")] }
+    const design = sceneToDesign(rectScene)
+    const clip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "panel", clipPath: { type: "rect", x: -20, y: 0, width: 80, height: 60, radiusX: 12, radiusY: 12 } })
+    const saved = designToScene({ ...design, scene: clip })
+    expect(saved.issues).toEqual([])
+    expect(saved.scene.layers[0].shapeClip).toMatchObject({ clips: [{ type: "rect", x: -20, y: 0, width: 80, height: 60, radiusX: 12, radiusY: 12 }] })
+    expect(sceneToDesign(saved.scene).scene.nodes.panel).toMatchObject({ clipPath: { type: "rect", x: -20, width: 80, radiusX: 12 } })
+    const tickerClip = applyCommand(design.scene, { type: "SET_NODE_CLIP_PATH", id: "ticker", clipPath: { type: "rect", x: 0, y: 0, width: 10, height: 10, radiusX: 0, radiusY: 0 } })
+    expect(designToScene({ ...design, scene: tickerClip }).issues).toContainEqual({ nodeId: "ticker", message: "Clipping on this live layer cannot be saved into a Rhema scene yet" })
   })
 
   it("draw in layer order with Rhema's boxes on a 1920×1080 frame", () => {
