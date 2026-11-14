@@ -112,6 +112,7 @@ function toNode(layer: SceneLayer): SaraswatiNode {
       color: layer.textGradient ? gradientPaint(layer.textGradient) : { type: "solid", color: layer.textColor ?? "#ffffff" },
       stroke: layer.textOutline ? { type: "solid", color: layer.textOutline.color } : null,
       strokeWidth: layer.textOutline?.width ?? 0,
+      ...(layer.shapeClip ? (() => { const c = layer.shapeClip.clips; return { clipPath: c.at(-1) ?? null, ...(c.length > 1 ? { clipPathStack: c.slice(0, -1) } : {}) } })() : {}),
     }
     return text
   }
@@ -381,7 +382,13 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
         else if (node.color.type !== "solid" && node.color.type !== "gradient") refuse("This text paint cannot be drawn on Rhema outputs")
         const textEdge = shapeOutline({ ...node, radiusX: 0, radiusY: 0 }, false)
         if ("issue" in textEdge) refuse(textEdge.issue)
-        if (node.clipPath || (node.clipPathStack?.length ?? 0) > 0) refuse("Text clipping cannot be used in Rhema scene output yet")
+        // Clipped in the editor (#448): the editor clips words in their laid-out box, centred; outputs can
+        // match that only while the saved box is that box (not a taller height kept from an earlier save).
+        const textClips = [...(node.clipPathStack ?? []), ...(node.clipPath ? [node.clipPath] : [])]
+        const laidOut = textClips.length && textBounds ? { width: node.width, height: textBounds.height / Math.abs(node.scaleY || 1) } : null
+        const textClip = laidOut ? normalizeShapeClip({ ...laidOut, clips: textClips }) : undefined
+        if (textClips.length && (!textBounds || Math.abs(size.h - textBounds.height) > 0.5)) refuse("Clipped text must keep the height of its words for Rhema outputs; let the box fit the words")
+        else if (textClips.length && !textClip) refuse(`This text's clipping cannot be drawn on Rhema outputs: ${shapeClipIssue({ ...laidOut, clips: textClips })}`)
         if (node.text.length > 2000) refuse("Static text is limited to 2,000 characters in Rhema scene output")
         if (typeof binding.textSecond === "string" && binding.textSecond.length > 2000) refuse("Second-language text is limited to 2,000 characters in Rhema scene output")
         if (!TEXT_WEIGHTS.has(node.fontWeight)) refuse("This text weight is not supported by Rhema scene output yet")
@@ -409,6 +416,8 @@ export function designToScene(design: RhemaDesign, pageId?: string): { scene: Sc
           layer.underline = node.underline
           // Saved by the editor: outputs widen an over-wide word as the editor does (from its origin).
           layer.textWiden = node.originX === "center" ? "both" : node.originX === "right" ? "left" : "right"
+          if (textClip) layer.shapeClip = textClip
+          else delete layer.shapeClip
         }
       }
     } else if (node.type === "image") {
