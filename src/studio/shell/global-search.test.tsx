@@ -157,3 +157,14 @@ describe("Find anything (Cmd/Ctrl+K) and scripture, hymns and songs (#407)", () 
     expect(useBroadcastStore.getState().liveItemId).toBe(liveBefore)
   })
 })
+
+describe("findInOrder (#407)", () => {
+  it("offers the Bible first for a reference, last for a hymn number, and not at all without a number", async () => {
+    const { findInOrder } = await import("./find-in")
+    const ids = (q: string) => findInOrder(q).map(([section]) => section)
+    expect(ids("romans 8 28")).toEqual(["bible", "hymns", "songs"])
+    expect(ids("1 John 3:16")).toEqual(["bible", "hymns", "songs"])
+    expect(ids("245")).toEqual(["hymns", "songs", "bible"])
+    expect(ids("amazing grace")).toEqual(["hymns", "songs"])
+  })
+})

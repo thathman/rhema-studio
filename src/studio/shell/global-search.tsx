@@ -1,4 +1,5 @@
 import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PlusIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, ShieldCheckIcon, CableIcon } from "lucide-react"
+import { findInOrder } from "@/studio/shell/find-in"
 import { useState } from "react"
 import { defaultFilter } from "cmdk"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -57,8 +58,6 @@ const LIVE_TOOLS: ReadonlyArray<readonly [ProductionTab, string, string]> = [
   ["health", "Show health", "health preflight check readiness ndi"],
 ]
 
-/** Library sections that search by words handed from here (#407). */
-const FIND_IN: ReadonlyArray<readonly [LibrarySection, string]> = [["hymns", "the Hymn book"], ["songs", "Songs"], ["bible", "the Bible"]]
 
 const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [
   ["appearance", "Appearance", "light dark mode system theme night preferences"],
@@ -121,7 +120,7 @@ export function GlobalSearch() {
           // In the Library (#407): found there, previewed there; nothing reaches Live.
           <CommandGroup heading="Scripture, hymns and songs (in the Library)">
             {/* The Bible looks up references ("John 3:16", "jn 3 16"), so it is offered only for words with a number. */}
-            {FIND_IN.filter(([section]) => section !== "bible" || /\d/.test(query)).map(([section, label]) => (
+            {findInOrder(query).map(([section, label]) => (
               <CommandItem key={section} value={`library find ${section} ${query}`} onSelect={() => run(() => useShellStore.getState().findInLibrary(section, query.trim()))}>
                 <LibraryBigIcon /> <span className="truncate">Find “{query.trim()}” in {label}</span>
                 <span className="ml-auto shrink-0 text-xs text-muted-foreground">opens the Library</span>
