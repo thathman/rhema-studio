@@ -363,7 +363,7 @@ function NeedsAttention({ needs, className }: { needs: Attention[]; className?: 
 }
 
 const ROLE_NAMES = { congregation: "Congregation", stage: "Stage", signage: "Signage" } as const
-const LANGUAGE_NAMES = { both: "Both languages, as prepared", first: "First language only", second: "Second language only" } as const
+const LANGUAGE_NAMES = { both: "Both languages, as prepared", first: "First language only", second: "Second language only", en: "English only", yo: "Yorùbá only" } as const
 const SAMPLE_VERSE = { reference: "John 3:16", segments: [{ text: "For God so loved the world" }] }
 
 

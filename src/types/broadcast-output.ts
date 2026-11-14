@@ -139,10 +139,14 @@ export interface SignageSchedule {
 
 /**
  * Which language(s) of a bilingual frame an output shows. Absent means `both`.
- * "second" falls back to the frame as prepared when there is no second
- * language; Stage outputs label that fallback.
+ * "first"/"second" go by position in each frame (the Bible's first translation, a hymn's first
+ * language); "en"/"yo" pin the screen to that language whichever position it has (#446).
+ * A language the frame lacks falls back to the frame as prepared; Stage outputs label that fallback.
  */
-export type BroadcastOutputLanguage = "both" | "first" | "second"
+export type BroadcastOutputLanguage = "both" | "first" | "second" | PinnedLanguage
+
+/** A language a screen can be pinned to across the Bible, hymns and songs (#446). */
+export type PinnedLanguage = "en" | "yo"
 
 /** What a stage output is sent on every change. Plain text only. */
 export interface StagePayload {

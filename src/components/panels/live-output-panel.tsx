@@ -8,7 +8,7 @@ import { useFeedHealth } from "@/lib/browser-feeds"
 import { cn } from "@/lib/utils"
 import { useBroadcastStore } from "@/stores"
 import { outputOnAir } from "@/lib/output-on-air"
-import { forOutputLanguage, LANGUAGE_NAMES, withLanguageOverride } from "@/lib/output-language"
+import { forOutputLanguage, LANGUAGE_NAMES, OUTPUT_LANGUAGES, withLanguageOverride } from "@/lib/output-language"
 import { LiveSourcesStrip } from "@/studio/present/live-sources-strip"
 import { StatusChip } from "@/studio/ui/status-chip"
 import type { BroadcastOutput, BroadcastOutputLanguage, BroadcastOutputStatus } from "@/types"
@@ -85,7 +85,7 @@ export function LiveOutputPanel({ outputId, sceneTakeAction }: { outputId?: stri
                 <SelectTrigger size="sm" className="text-xs" aria-label={`Languages on ${savedOutput.name} for this session`}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="saved">As saved ({LANGUAGE_NAMES[savedLanguage].toLowerCase()})</SelectItem>
-                  {(["both", "first", "second"] as const).filter((l) => l !== savedLanguage).map((l) => (
+                  {OUTPUT_LANGUAGES.filter((l) => l !== savedLanguage).map((l) => (
                     <SelectItem key={l} value={l}>{LANGUAGE_NAMES[l]}</SelectItem>
                   ))}
                 </SelectContent>

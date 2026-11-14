@@ -711,7 +711,7 @@ function Inspector({ layer, onChange, onRemove, onOpenDesign, hasPinnedDesign, t
   )
 }
 
-const LANGUAGE_NAMES: Record<BroadcastOutputLanguage, string> = { both: "Both languages, as prepared", first: "First language only", second: "Second language only" }
+const LANGUAGE_NAMES: Record<BroadcastOutputLanguage, string> = { both: "Both languages, as prepared", first: "First language only", second: "Second language only", en: "English only", yo: "Yorùbá only" }
 
 /** A library video for a video layer: it loops without sound on every screen that shows the scene. */
 export function VideoPicker({ layer, onChange }: { layer: SceneLayer; onChange: (p: Partial<SceneLayer>) => void }) {

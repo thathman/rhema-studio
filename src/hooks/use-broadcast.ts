@@ -23,7 +23,15 @@ export function toVerseRenderData(
   return {
     reference: `${verse.book_name} ${verse.chapter}:${verse.verse} (${translation})`,
     segments: [{ verseNumber: verse.verse, text: verse.text }],
+    ...languagesOf([verse]),
   }
+}
+
+/** The verses' translation languages, for a screen pinned to one language (#446); absent when one is unknown. */
+function languagesOf(verses: Verse[]): { languages?: string[] } {
+  const { translations } = useBibleStore.getState()
+  const languages = verses.map((v) => translations.find((t) => t.id === v.translation_id)?.language)
+  return languages.every((l): l is string => !!l) ? { languages } : {}
 }
 
 /**
@@ -44,6 +52,7 @@ export function toDualVerseRenderData(
     reference: `${first.verse.book_name} ${first.verse.chapter}:${first.verse.verse}`,
     segments: [{ text: first.verse.text }],
     translationLines: entries.map(({ verse }) => verse.text),
+    ...languagesOf(entries.map(({ verse }) => verse)),
   }
 }
 
@@ -543,7 +552,7 @@ export function presentQuickScreen(screen: QuickScreen): void {
   const { title, lines, yo } = QUICK_SCREENS[screen]
   const bilingual = yorubaInUse()
   store.setLiveVerse(
-    { kind: "slide", reference: title, segments: [{ text: lines.join(" ") }], lines: [...lines], ...(bilingual ? { secondaryLines: [...yo] } : {}), quick: true, quickScreen: screen },
+    { kind: "slide", reference: title, segments: [{ text: lines.join(" ") }], lines: [...lines], ...(bilingual ? { secondaryLines: [...yo], languages: ["en", "yo"] } : { languages: ["en"] }), quick: true, quickScreen: screen },
     null,
     { goLive: true, keepHeld: true }
   )

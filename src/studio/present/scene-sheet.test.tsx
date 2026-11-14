@@ -123,7 +123,7 @@ describe("the composer and the output card", () => {
     expect(el.textContent).not.toContain("Show the camera's name on the bars")
     await act(async () => layerButton("Bible").click())
     const language = byLabel<HTMLSelectElement>("Layer language")
-    expect([...language.options].map((o) => o.value)).toEqual(["", "both", "first", "second"])
+    expect([...language.options].map((o) => o.value)).toEqual(["", "both", "first", "second", "en", "yo"])
     await change(language, "second")
     expect(byLabel<HTMLSelectElement>("Layer language").value).toBe("second")
     expect(byLabel<HTMLSelectElement>("How this layer changes")).toBeTruthy()

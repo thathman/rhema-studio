@@ -1,4 +1,4 @@
-import { forOutputLanguage, isOutputLanguageFallback } from "@/lib/output-language"
+import { forOutputLanguage, isOutputLanguage, isOutputLanguageFallback } from "@/lib/output-language"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { cameraPathOf, cameraSourceId, feedFrame, withCameraPath, type LiveSources, type StateSources } from "@/lib/live-sources"
 import { CONTENT_TYPES } from "@/types/broadcast"
@@ -244,7 +244,7 @@ export function normalizeScene(raw: unknown): Scene | null {
     // What a camera's box shows while it is not sending: absent stays absent (colour bars).
     const noSignal = l.kind === "camera" && NO_SIGNALS.includes(l.noSignal as NoSignal) ? l.noSignal : undefined
     const noSignalName = l.kind === "camera" && l.noSignalName === true ? true : undefined
-    const language = l.language === "both" || l.language === "first" || l.language === "second" ? l.language : undefined
+    const language = isOutputLanguage(l.language) ? l.language : undefined
     const videoUrl = typeof l.videoUrl === "string" && l.videoUrl && l.videoUrl.length <= 4000 ? l.videoUrl : undefined
     const mediaFile = typeof l.mediaFile === "string" && MEDIA_FILE.test(l.mediaFile) ? l.mediaFile : undefined
     const fadeMs = clamp(l.fadeMs, 0, 3000, 0)

@@ -1,7 +1,7 @@
-import type { BroadcastOutputRole, BroadcastOutputType } from "@/types"
+import type { BroadcastOutputLanguage, BroadcastOutputRole, BroadcastOutputType } from "@/types"
 
 export interface GroupTakeImpact {
-  language: "both" | "first" | "second"
+  language: BroadcastOutputLanguage
   aspectRatio: string
   themeId: string
   themeFor: Record<string, string>

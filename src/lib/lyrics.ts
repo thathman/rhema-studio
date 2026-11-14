@@ -9,6 +9,8 @@ export interface LyricSlide {
   lines: string[]
   /** Second language, same section. */
   secondaryLines?: string[]
+  /** The language tags of `lines` and `secondaryLines`, for a screen pinned to one language (#446). */
+  languages?: string[]
   /** Language tags the item asked for that this section has no text in. */
   missing: string[]
   index: number
@@ -161,8 +163,9 @@ export function buildSlides(
     if (available.length === 0) continue
     const primary = splitBody(section.texts[available[0]], max)
     const secondary = available[1] ? splitBody(section.texts[available[1]], max) : null
+    const languages = available.slice(0, 2)
     if (!secondary) {
-      for (const lines of primary) slides.push({ sectionId, sectionLabel: section.label, lines, missing, index: 0, total: 0 })
+      for (const lines of primary) slides.push({ sectionId, sectionLabel: section.label, lines, languages, missing, index: 0, total: 0 })
       continue
     }
     // Aligned: pair blank-line chunks when the counts agree, else whole section.
@@ -179,10 +182,10 @@ export function buildSlides(
         const ps = splitInto(p, parts)
         const ss = splitInto(s, parts)
         for (let i = 0; i < parts; i++) {
-          slides.push({ sectionId, sectionLabel: section.label, lines: ps[i] ?? [], secondaryLines: ss[i] ?? [], missing, index: 0, total: 0 })
+          slides.push({ sectionId, sectionLabel: section.label, lines: ps[i] ?? [], secondaryLines: ss[i] ?? [], languages, missing, index: 0, total: 0 })
         }
       } else {
-        slides.push({ sectionId, sectionLabel: section.label, lines: p, secondaryLines: s, missing, index: 0, total: 0 })
+        slides.push({ sectionId, sectionLabel: section.label, lines: p, secondaryLines: s, languages, missing, index: 0, total: 0 })
       }
     }
   }
@@ -238,6 +241,7 @@ export function toLyricRenderData(song: SongWithSections, slide: LyricSlide): Ve
     segments: [{ text: [...slide.lines, ...(slide.secondaryLines ?? [])].join(" ") }],
     lines: slide.lines,
     secondaryLines: slide.secondaryLines,
+    ...(slide.languages ? { languages: slide.languages } : {}),
     footer: copyrightFooter(song.song),
   }
 }

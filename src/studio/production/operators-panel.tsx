@@ -1285,7 +1285,7 @@ function GroupTakeOutputReview({ output, scene, live }: { output: LiveStateV1["o
   ] as [string, string][] : []
   const uniqueLooks = [...new Map(lookRows.map(([label, id]) => [`${label}:${id}`, [label, id] as [string, string]])).values()]
   const sceneFollowers = [...new Set(layers.filter((layer) => layer.kind === "feed").flatMap((layer) => layer.shows?.length ? layer.shows : ["current program"]))]
-  const language = impact?.language === "both" ? "Both language variants" : impact?.language === "first" ? "First language" : impact?.language === "second" ? "Second language" : "Unavailable"
+  const language = impact?.language === "both" ? "Both language variants" : impact?.language === "first" ? "First language" : impact?.language === "second" ? "Second language" : impact?.language === "en" ? "English" : impact?.language === "yo" ? "Yorùbá" : "Unavailable"
 
   return (
     <li className="grid gap-2 rounded-md border border-border bg-background p-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.65fr)]">

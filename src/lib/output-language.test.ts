@@ -43,3 +43,27 @@ describe("a language chosen in Live for this session (#446)", () => {
     expect(withLanguageOverride({ id: "x" }, { x: { language: "both" } })).toEqual({ id: "x" })
   })
 })
+
+describe("a screen pinned to one language (#446)", () => {
+  // The Bible first in English; a CAC hymn first in Yorùbá.
+  const bible = { ...verse, languages: ["en", "yo"] }
+  const hymn = { kind: "lyric" as const, reference: "CAC 999", segments: [], lines: ["Ẹ yin Olúwa"], secondaryLines: ["Praise the Lord"], languages: ["yo", "en"] }
+
+  it("shows its language whichever position it has in the frame", () => {
+    expect(forOutputLanguage(bible, "yo")?.segments).toEqual([{ text: "Nítorí Ọlọ́run fẹ́" }])
+    expect(forOutputLanguage(hymn, "yo")?.lines).toEqual(["Ẹ yin Olúwa"])
+    expect(forOutputLanguage(hymn, "yo")?.secondaryLines).toBeUndefined()
+    expect(forOutputLanguage(hymn, "en")?.lines).toEqual(["Praise the Lord"])
+    expect(forOutputLanguage(bible, "en")?.translationLines).toBeUndefined()
+  })
+
+  it("shows the frame as prepared, and says so, when its language is not there", () => {
+    const englishOnly = { ...verse, translationLines: undefined, languages: ["en"] }
+    expect(forOutputLanguage(englishOnly, "yo")).toBe(englishOnly)
+    expect(isOutputLanguageFallback(englishOnly, "yo")).toBe(true)
+    expect(isOutputLanguageFallback(hymn, "en")).toBe(false)
+    // A frame that does not say its languages is shown as prepared, with no notice.
+    expect(forOutputLanguage(verse, "yo")).toBe(verse)
+    expect(isOutputLanguageFallback(verse, "yo")).toBe(false)
+  })
+})
