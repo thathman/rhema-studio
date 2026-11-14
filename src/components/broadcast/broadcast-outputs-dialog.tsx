@@ -257,10 +257,9 @@ export function BroadcastOutputsDialog({
 
       <OutputEditorDialog
         open={editorOpen}
-        onOpenChange={(next) => {
-          setEditorOpen(next)
-          if (!next) setEditingId(null)
-        }}
+        // Keep which output it edits while it fades out (every opener sets it), so a closing "Output settings"
+        // does not flash "Add an output".
+        onOpenChange={setEditorOpen}
         output={editingOutput}
         draft={newOutputDraft}
         monitors={monitors}
