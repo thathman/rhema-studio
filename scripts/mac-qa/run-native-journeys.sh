@@ -34,6 +34,7 @@ cleanup() {
       "$QA_RUN/out/scene-save-journey.json" \
       "$QA_RUN/out/take-failure-journey.json" \
       "$QA_RUN/out/home-journey.json" \
+      "$QA_RUN/out/five-part-service-journey.json" \
       "$QA_RUN/out/setup-recording-output.json" \
       "$QA_RUN/out/recording-output-ready.json" \
       "$QA_RUN/out/native-recording-journey.json" \
@@ -383,6 +384,31 @@ if [[ "$HOME_STATUS" != 0 ]]; then
 fi
 
 python3 - "$QA_RUN/out/home-journey.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as report_file:
+    report = json.load(report_file)
+if not report.get("ok"):
+    print(json.dumps(report, ensure_ascii=False, indent=2), file=sys.stderr)
+    raise SystemExit(1)
+print(json.dumps(report.get("result"), ensure_ascii=False, indent=2))
+PY
+
+# A five-part service (#444, #411): saved, closed and reopened exact; phases, 20 view flips, reorder and Undo; no Take.
+set +e
+{
+  cat "$ROOT/scripts/mac-qa/five-part-service-journey.js"
+  printf '\nreturn await runScenario()\n'
+} | "$ROOT/scripts/mac-qa/qa.py" main five-part-service-journey - 60 >"$QA_SCRATCH/five-part-result.json"
+FIVE_STATUS=$?
+set -e
+if [[ "$FIVE_STATUS" != 0 ]]; then
+  cat "$QA_SCRATCH/five-part-result.json" >&2
+  cat "$QA_SCRATCH/app.log" >&2
+  exit "$FIVE_STATUS"
+fi
+python3 - "$QA_RUN/out/five-part-service-journey.json" <<'PY'
 import json
 import sys
 
