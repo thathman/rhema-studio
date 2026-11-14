@@ -71,6 +71,8 @@ describe("slide splitting", () => {
     // Verse 2 only exists in Yoruba: it is shown, with English reported missing.
     expect(slides[2].lines).toEqual(["Ẹsẹ kejì"])
     expect(slides[2].missing).toEqual(["en"])
+    // Each slide says which language its lines are in, for a screen pinned to one (#446).
+    expect(slides.map((s) => s.languages)).toEqual([["en", "yo"], ["en"], ["yo"], ["en"]])
   })
 
   it("splits a long bilingual section into the same number of parts in both languages", () => {

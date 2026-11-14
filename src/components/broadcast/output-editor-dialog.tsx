@@ -334,6 +334,8 @@ export function OutputEditorDialog({
                 <SelectItem value="both">Both languages, as prepared</SelectItem>
                 <SelectItem value="first">First language only</SelectItem>
                 <SelectItem value="second">Second language only</SelectItem>
+                <SelectItem value="en">English only, Bible and songs</SelectItem>
+                <SelectItem value="yo">Yorùbá only, Bible and songs</SelectItem>
               </SelectContent>
             </Select>
           </label>

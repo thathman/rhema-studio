@@ -220,6 +220,8 @@ type SceneReviewOutput = Pick<BroadcastOutput, "id" | "name" | "language">
 function outputLanguageLabel(language: BroadcastOutput["language"]): string {
   if (language === "first") return "First language only"
   if (language === "second") return "Second language only"
+  if (language === "en") return "English only"
+  if (language === "yo") return "Yorùbá only"
   return language === "both" ? "Both languages" : "Both languages (default)"
 }
 

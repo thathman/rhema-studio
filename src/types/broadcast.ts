@@ -28,6 +28,8 @@ export interface VerseRenderData {
   lines?: string[]
   /** Same section in the second language, after a gap, in the secondary style. */
   secondaryLines?: string[]
+  /** The language tag of the first and second text ("en", "yo"), when known: a pinned screen picks by it (#446). */
+  languages?: string[]
   /** Small copyright line at the bottom of the text area. */
   footer?: string
   /** A picture over the whole frame (above the theme background). */

@@ -1651,7 +1651,7 @@ pub fn remote_group_take_preflight(
         let language = impact
             .get("language")
             .and_then(serde_json::Value::as_str)
-            .filter(|value| matches!(*value, "both" | "first" | "second"))
+            .filter(|value| matches!(*value, "both" | "first" | "second" | "en" | "yo"))
             .ok_or_else(|| format!("Output {id} language is unavailable; refresh before a group Take"))?
             .to_string();
         let aspect_ratio = impact

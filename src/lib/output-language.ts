@@ -22,6 +22,8 @@ export const LANGUAGE_SHORT_NAMES: Record<BroadcastOutputLanguage, string> = {
   both: "Both languages",
   first: "First language",
   second: "Second language",
+  en: "English",
+  yo: "Yorùbá",
 }
 
 /** How a language is named on screen. */
@@ -29,6 +31,25 @@ export const LANGUAGE_NAMES: Record<BroadcastOutputLanguage, string> = {
   both: "Both languages",
   first: "First language only",
   second: "Second language only",
+  en: "English only",
+  yo: "Yorùbá only",
+}
+
+/** Every choice, in picker order. */
+export const OUTPUT_LANGUAGES: readonly BroadcastOutputLanguage[] = ["both", "first", "second", "en", "yo"]
+
+export function isOutputLanguage(value: unknown): value is BroadcastOutputLanguage {
+  return typeof value === "string" && (OUTPUT_LANGUAGES as readonly string[]).includes(value)
+}
+
+/**
+ * A pinned language as a position in this frame (#446): "first" or "second" where the frame says
+ * which language each text is in, else "both" (the frame as prepared, never blank).
+ */
+export function positionFor(verse: Pick<VerseRenderData, "languages"> | null, language: BroadcastOutputLanguage = "both"): "both" | "first" | "second" {
+  if (language === "both" || language === "first" || language === "second") return language
+  const at = verse?.languages?.indexOf(language) ?? -1
+  return at === 0 ? "first" : at === 1 ? "second" : "both"
 }
 
 export const OUTPUT_LANGUAGE_FALLBACK_NOTICE = "Second language unavailable; showing available text."
@@ -41,7 +62,8 @@ export const OUTPUT_LANGUAGE_FALLBACK_NOTICE = "Second language unavailable; sho
  * fallback with a notice.
  * Pictures and single-language frames pass through untouched.
  */
-export function forOutputLanguage(verse: VerseRenderData | null, language: BroadcastOutputLanguage = "both"): VerseRenderData | null {
+export function forOutputLanguage(verse: VerseRenderData | null, pick: BroadcastOutputLanguage = "both"): VerseRenderData | null {
+  const language = positionFor(verse, pick)
   if (!verse || language === "both") return verse
   if (language === "first") {
     return omit(verse, ["translationLines", "secondaryLines"])
@@ -57,8 +79,12 @@ export function forOutputLanguage(verse: VerseRenderData | null, language: Broad
 }
 
 /** Whether a text output requested its second language but has only available primary text. */
-export function isOutputLanguageFallback(verse: VerseRenderData | null, language: BroadcastOutputLanguage = "both"): boolean {
-  if (!verse || language !== "second" || verse.kind === "image" || verse.content === "picture" || verse.screen) return false
+export function isOutputLanguageFallback(verse: VerseRenderData | null, pick: BroadcastOutputLanguage = "both"): boolean {
+  if (!verse || verse.kind === "image" || verse.content === "picture" || verse.screen) return false
+  // Pinned: a frame that says its languages and has not this one shows what it has.
+  if ((pick === "en" || pick === "yo") && verse.languages?.length && !verse.languages.includes(pick)) return true
+  const language = positionFor(verse, pick)
+  if (language !== "second") return false
 
   const hasText = [
     ...(verse.lines ?? []),

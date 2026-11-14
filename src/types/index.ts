@@ -13,6 +13,7 @@ export type { BroadcastTheme, VerseRenderData, VerseSegment, RenderOptions, Them
 export type {
   BroadcastOutput,
   BroadcastOutputLanguage,
+  PinnedLanguage,
   BroadcastOutputRole,
   SignageSettings,
   LowerThird,

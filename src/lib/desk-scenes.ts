@@ -12,6 +12,7 @@ import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
 import type { Scene, SceneBox, SceneCrop, SceneLayer, SceneLayerKind } from "@/types"
 import { keepHostGradients } from "@/lib/scene-gradient"
+import { OUTPUT_LANGUAGES } from "@/lib/output-language"
 import { layerRotation, layerTurns } from "@/lib/scene-rotation"
 
 /**
@@ -145,7 +146,7 @@ function deskLayer(raw: unknown, had: SceneLayer | undefined, cameras: Set<strin
       textColor: typeof l.textColor === "string" && HEX.test(l.textColor) ? l.textColor : "#ffffff",
       underline: l.underline === true,
     } : {}),
-    ...(kind === "feed" && pick(l.language, ["both", "first", "second"] as const) ? { language: pick(l.language, ["both", "first", "second"] as const) } : {}),
+    ...(kind === "feed" && pick(l.language, OUTPUT_LANGUAGES) ? { language: pick(l.language, OUTPUT_LANGUAGES) } : {}),
     ...(fadeMs ? { fadeMs } : {}),
     ...(rotation !== undefined ? { rotation } : {}),
   }

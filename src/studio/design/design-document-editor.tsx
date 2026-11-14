@@ -1657,6 +1657,8 @@ export function DesignDocumentEditor({
                         <option value="">Use each output’s language</option>
                         <option value="first">Primary language only</option>
                         <option value="second">Secondary language only</option>
+                        <option value="en">English only</option>
+                        <option value="yo">Yorùbá only</option>
                         <option value="both">Both available languages</option>
                       </select>
                     </label>
